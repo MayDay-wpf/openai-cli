@@ -1,6 +1,6 @@
 {
   "name": "openai-cli-unofficial",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A powerful OpenAI CLI Coding Agent built with TypeScript",
   "main": "dist/index.js",
   "bin": {
@@ -14,7 +14,16 @@
     "prepublishOnly": "npm run clean && npm run build",
     "prepare": "npm run build"
   },
-  "keywords": ["openai", "cli", "coding", "agent", "typescript", "ai", "assistant", "programming"],
+  "keywords": [
+    "openai",
+    "cli",
+    "coding",
+    "agent",
+    "typescript",
+    "ai",
+    "assistant",
+    "programming"
+  ],
   "author": "",
   "license": "MIT",
   "homepage": "https://github.com/MayDay-wpf/openai-cli#readme",
@@ -52,4 +61,4 @@
     "ts-node": "^10.9.1",
     "typescript": "^5.3.0"
   }
-} 
+}
