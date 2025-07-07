@@ -63,13 +63,10 @@ export class InteractiveMenu {
 
     let selectedIndex = 0;
     const choices = options.choices;
+    let isFirstRender = true;
 
-    const showMenu = () => {
-      // 清除之前的选项显示
-      process.stdout.write('\x1B[' + (choices.length + 1) + 'A');
-      process.stdout.write('\x1B[0J');
-
-      choices.forEach((choice, index) => {
+    const renderMenu = (): string[] => {
+      return choices.map((choice, index) => {
         const isSelected = index === selectedIndex;
         const circle = isSelected ? chalk.cyan('●') : chalk.gray('○');
         const text = isSelected ? chalk.cyan.bold(choice.name) : chalk.white(choice.name);
@@ -77,11 +74,36 @@ export class InteractiveMenu {
           ? (isSelected ? chalk.cyan(` ${choice.description}`) : chalk.gray(` ${choice.description}`))
           : '';
         
-        console.log(`  ${circle} ${text}${description}`);
+        return `  ${circle} ${text}${description}`;
       });
     };
 
+    const showMenu = () => {
+      if (!isFirstRender) {
+        // 隐藏光标，减少闪烁
+        process.stdout.write('\x1B[?25l');
+        // 移动到菜单开始位置
+        process.stdout.write('\x1B[' + choices.length + 'A');
+        // 清除从当前位置到屏幕末尾的内容
+        process.stdout.write('\x1B[0J');
+      }
+      
+      // 批量渲染所有菜单项
+      const menuLines = renderMenu();
+      process.stdout.write(menuLines.join('\n') + '\n');
+      
+      if (!isFirstRender) {
+        // 显示光标
+        process.stdout.write('\x1B[?25h');
+      }
+      
+      isFirstRender = false;
+    };
+
     return new Promise((resolve) => {
+      // 隐藏光标以减少闪烁
+      process.stdout.write('\x1B[?25l');
+      
       // 初始显示
       showMenu();
 
@@ -89,6 +111,13 @@ export class InteractiveMenu {
       stdin.setRawMode(true);
       stdin.resume();
       stdin.setEncoding('utf8');
+
+      const cleanup = () => {
+        stdin.setRawMode(false);
+        stdin.removeListener('data', keyHandler);
+        // 恢复光标显示
+        process.stdout.write('\x1B[?25h');
+      };
 
       const keyHandler = (key: string) => {
         switch (key) {
@@ -102,12 +131,12 @@ export class InteractiveMenu {
             break;
           case '\r': // 回车
           case '\n':
-            stdin.setRawMode(false);
-            stdin.removeListener('data', keyHandler);
+            cleanup();
             console.log();
             resolve(choices[selectedIndex].value);
             break;
           case '\u0003': // Ctrl+C
+            cleanup();
             process.exit();
             break;
         }

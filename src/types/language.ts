@@ -23,16 +23,16 @@ export interface Messages {
     title: string;
     subtitle: string;
     description: string;
-    features: {
-      codeGen: string;
-      refactor: string;
-      docs: string;
-      debug: string;
-      bestPractice: string;
-    };
     tagline: string;
     menuPrompt: string;
     menuOptions: {
+      start: string;
+      config: string;
+      language: string;
+      help: string;
+      exit: string;
+    };
+    menuDescription: {
       start: string;
       config: string;
       language: string;

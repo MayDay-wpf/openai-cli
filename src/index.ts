@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { WelcomeScreen } from './ui/welcome';
+import { WelcomeScreen } from './ui/screens/welcome';
 const packageJson = require('../package.json');
 
 const program = new Command();

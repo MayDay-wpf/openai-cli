@@ -1,4 +1,4 @@
-import { Messages } from '../types/language';
+import { Messages } from '../../types/language';
 
 export const en: Messages = {
   welcome: {
@@ -7,13 +7,6 @@ export const en: Messages = {
     title: 'OpenAI CLI Agent',
     subtitle: 'Next-Generation AI Programming Assistant',
     description: 'Professional AI-powered programming tool',
-    features: {
-      codeGen: 'Intelligent Code Generation & Optimization',
-      refactor: 'Automated Code Refactoring',
-      docs: 'Smart Documentation Generation',
-      debug: 'Error Diagnosis & Fixing',
-      bestPractice: 'Programming Best Practice Guidance'
-    },
     tagline: 'Powered by OpenAI GPT',
     menuPrompt: 'Select action',
     menuOptions: {
@@ -22,6 +15,13 @@ export const en: Messages = {
       language: 'Language Settings',
       help: 'Help Documentation',
       exit: 'Exit Program'
+    },
+    menuDescription: {
+      start: 'Enter main application interface',
+      config: 'Configure API keys and preferences',
+      language: 'Switch language settings',
+      help: 'View help documentation',
+      exit: 'Exit program'
     },
     actions: {
       startingMain: 'Launching main interface...',

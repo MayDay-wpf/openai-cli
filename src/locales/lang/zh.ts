@@ -1,4 +1,4 @@
-import { Messages } from '../types/language';
+import { Messages } from '../../types/language';
 
 export const zh: Messages = {
   welcome: {
@@ -7,13 +7,6 @@ export const zh: Messages = {
     title: 'OpenAI CLI Agent',
     subtitle: '下一代智能编程助手',
     description: '专业AI驱动的编程工具',
-    features: {
-      codeGen: '智能代码生成与优化',
-      refactor: '自动化代码重构',
-      docs: '智能文档生成',
-      debug: '错误诊断与修复',
-      bestPractice: '编程最佳实践指导'
-    },
     tagline: 'Powered by OpenAI GPT',
     menuPrompt: '请选择操作',
     menuOptions: {
@@ -21,6 +14,13 @@ export const zh: Messages = {
       config: '系统配置',
       language: '语言设置',
       help: '帮助文档',
+      exit: '退出程序'
+    },
+    menuDescription: {
+      start: '进入主功能界面',
+      config: '配置API密钥和偏好',
+      language: '切换语言设置',
+      help: '查看帮助文档',
       exit: '退出程序'
     },
     actions: {

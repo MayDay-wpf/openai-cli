@@ -1,6 +1,6 @@
 import { Messages, Language } from '../types/language';
-import { zh } from './zh';
-import { en } from './en';
+import { zh } from './lang/zh';
+import { en } from './lang/en';
 
 const availableMessages: Partial<Record<Language, Messages>> = {
   zh,
