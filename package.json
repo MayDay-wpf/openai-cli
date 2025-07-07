@@ -1,0 +1,55 @@
+{
+  "name": "openai-cli-unofficial",
+  "version": "1.0.0",
+  "description": "A powerful OpenAI CLI Coding Agent built with TypeScript",
+  "main": "dist/index.js",
+  "bin": {
+    "openai-cli": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "prepare": "npm run build"
+  },
+  "keywords": ["openai", "cli", "coding", "agent", "typescript", "ai", "assistant", "programming"],
+  "author": "",
+  "license": "MIT",
+  "homepage": "https://github.com/MayDay-wpf/openai-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MayDay-wpf/openai-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MayDay-wpf/openai-cli/issues"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "preferGlobal": true,
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "figlet": "^1.7.0",
+    "gradient-string": "^2.0.2",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/figlet": "^1.5.8",
+    "@types/gradient-string": "^1.1.5",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^20.10.0",
+    "rimraf": "^5.0.5",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.0"
+  }
+} 
