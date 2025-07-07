@@ -8,7 +8,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -26,20 +28,47 @@ jobs:
     - name: Build project
       run: npm run build
     
+    - name: Check NPM authentication
+      run: npm whoami
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    
     - name: Publish to npm
       run: npm publish
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     
+    - name: Extract tag name
+      id: tag
+      run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
     - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        tag_name: ${{ steps.tag.outputs.tag }}
+        name: OpenAI CLI Agent ${{ steps.tag.outputs.tag }}
         body: |
-          Changes in this Release:
-          - 查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解详情
+          🎉 **OpenAI CLI Agent ${{ steps.tag.outputs.tag }}**
+          
+          ## 📦 安装方式
+          ```bash
+          npm install -g openai-cli-unofficial@${{ steps.tag.outputs.tag }}
+          ```
+          
+          ## 📝 更新内容
+          查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解详情
+          
+          ## 📊 包信息
+          - 📦 包大小: ~14KB
+          - 🔗 npm 页面: https://www.npmjs.com/package/openai-cli-unofficial
+          
+          ## ✨ 主要功能
+          - 🧠 智能代码生成与优化
+          - 🔧 自动化代码重构  
+          - 📚 智能文档生成
+          - 🐛 错误诊断与修复
+          - 🌍 多语言支持（中文/英文）
         draft: false
-        prerelease: false 
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
