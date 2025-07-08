@@ -34,6 +34,19 @@ export interface Messages {
       language: string;
       help: string;
       exit: string;
+      backToMenu: string;
+    };
+    configCheck: {
+      title: string;
+      incompleteConfig: string;
+      missingItems: string;
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      prompt: string;
+      goToConfig: string;
+      continueAnyway: string;
+      backToMenu: string;
     };
     actions: {
       startingMain: string;

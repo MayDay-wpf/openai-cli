@@ -25,6 +25,7 @@ export class MainPage {
     isProcessing: false
   };
   private loadingController: LoadingController | null = null;
+  private isDestroyed = false;
   
   // 组件管理器
   private commandManager: CommandManager;
@@ -42,6 +43,44 @@ export class MainPage {
     languageService.onLanguageChange((language) => {
       this.updateLanguage();
     });
+  }
+
+  // 销毁方法，清理所有资源
+  destroy(): void {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+    
+    // 停止loading动画
+    if (this.loadingController) {
+      this.loadingController.stop();
+      this.loadingController = null;
+    }
+    
+    // 重置聊天状态
+    this.setChatState({ canSendMessage: false, isProcessing: false });
+    
+    // 清空消息
+    this.messages = [];
+    
+    // 清理stdin状态
+    if (process.stdin.isTTY) {
+      try {
+        process.stdin.setRawMode(false);
+      } catch (error) {
+        // 忽略错误
+      }
+    }
+    
+    // 移除所有可能的事件监听器
+    process.stdin.removeAllListeners('data');
+    process.stdin.removeAllListeners('error');
+    process.stdin.removeAllListeners('end');
+    
+    try {
+      process.stdin.pause();
+    } catch (error) {
+      // 忽略错误
+    }
   }
 
   private updateLanguage(): void {
@@ -79,9 +118,34 @@ export class MainPage {
   }
 
   async show(): Promise<void> {
+    // 确保之前的状态已清理
+    if (this.isDestroyed) {
+      // 重新初始化
+      this.isDestroyed = false;
+      this.chatState = {
+        canSendMessage: true,
+        isProcessing: false
+      };
+      this.messages = [];
+      this.loadingController = null;
+    }
+    
     // 强制清屏，确保完全清除欢迎页面内容
     process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
     process.stdout.write('\x1Bc');
+    
+    // 确保stdin处于正确状态
+    try {
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+      }
+      process.stdin.removeAllListeners('data');
+      process.stdin.removeAllListeners('error');
+      process.stdin.removeAllListeners('end');
+      process.stdin.pause();
+    } catch (error) {
+      // 忽略清理错误
+    }
     
     const main = this.currentMessages.main;
     
@@ -106,49 +170,61 @@ export class MainPage {
   }
 
   private async startChatLoop(): Promise<void> {
-    while (true) {
-      // 检查是否可以发送消息
-      if (!this.chatState.canSendMessage) {
-        process.stdout.write(chalk.red(this.currentMessages.main.status.cannotSendMessage + '\n'));
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        continue;
-      }
+    try {
+      while (true) {
+        // 检查是否已被销毁
+        if (this.isDestroyed) {
+          break;
+        }
+        
+        // 检查是否可以发送消息
+        if (!this.chatState.canSendMessage) {
+          process.stdout.write(chalk.red(this.currentMessages.main.status.cannotSendMessage + '\n'));
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
 
-      // 获取用户输入
-      const userInput = await this.getUserInput();
-      
-      if (userInput === '/exit') {
-        break;
-      }
+        // 获取用户输入
+        const userInput = await this.getUserInput();
+        
+        if (userInput === '/exit') {
+          break;
+        }
 
-      if (userInput === '/clear') {
-        this.messages = [];
-        // 强制清屏
-        process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
-        process.stdout.write('\x1Bc');
-        continue;
-      }
+        if (userInput === '/clear') {
+          this.messages = [];
+          // 强制清屏
+          process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
+          process.stdout.write('\x1Bc');
+          continue;
+        }
 
-      if (userInput === '/help') {
-        this.helpManager.showHelp(this.commandManager.getCommands());
-        continue;
-      }
+        if (userInput === '/help') {
+          this.helpManager.showHelp(this.commandManager.getCommands());
+          continue;
+        }
 
-      if (userInput === '/config') {
-        process.stdout.write(chalk.yellow(this.currentMessages.main.messages.configInDevelopment + '\n'));
-        continue;
-      }
+        if (userInput === '/config') {
+          process.stdout.write(chalk.yellow(this.currentMessages.main.messages.configInDevelopment + '\n'));
+          continue;
+        }
 
-      if (userInput === '/history') {
-        this.showHistory();
-        continue;
-      }
+        if (userInput === '/history') {
+          this.showHistory();
+          continue;
+        }
 
-      // 添加用户消息并直接显示
-      this.addUserMessage(userInput);
-      
-      // 模拟AI处理
-      await this.simulateAIProcessing();
+        // 添加用户消息并直接显示
+        this.addUserMessage(userInput);
+        
+        // 模拟AI处理
+        await this.simulateAIProcessing();
+      }
+    } catch (error) {
+      console.error('聊天循环出现错误:', error);
+    } finally {
+      // 确保在退出时清理所有资源
+      this.destroy();
     }
   }
 
@@ -167,18 +243,24 @@ export class MainPage {
   }
 
   private async getUserInput(): Promise<string> {
+    // 检查是否已被销毁
+    if (this.isDestroyed) {
+      return '/exit';
+    }
+    
     return new Promise((resolve, reject) => {
       let currentInput = '';
       let showingCommands = false;
       let filteredCommands: Command[] = [];
       let selectedIndex = 0;
+      let isDestroyed = false;
 
       // 显示初始提示符
       process.stdout.write(chalk.cyan(this.currentMessages.main.prompt));
 
       // 显示指令列表
       const showCommandList = (commands: Command[]) => {
-        if (commands.length === 0) return;
+        if (commands.length === 0 || isDestroyed) return;
         
         process.stdout.write('\n');
         commands.forEach((cmd, index) => {
@@ -192,12 +274,14 @@ export class MainPage {
         
         // 返回到输入行
         process.stdout.write(`\x1B[${commands.length + 1}A`);
-        process.stdout.write(`\x1B[${currentInput.length + 3}G`);
+        // 重新计算光标位置：提示符长度 + 当前输入长度
+        const promptLength = this.currentMessages.main.prompt.length;
+        process.stdout.write(`\x1B[${promptLength + currentInput.length + 1}G`);
       };
 
       // 隐藏指令列表
       const hideCommandList = () => {
-        if (!showingCommands || filteredCommands.length === 0) return;
+        if (!showingCommands || filteredCommands.length === 0 || isDestroyed) return;
         
         // 移动到指令列表开始位置并清除
         process.stdout.write('\x1B[1B'); // 下移一行到列表开始
@@ -208,13 +292,17 @@ export class MainPage {
           }
         }
         
-        // 返回到输入行
+        // 返回到输入行，光标定位到提示符后的正确位置
         process.stdout.write(`\x1B[${filteredCommands.length}A`);
-        process.stdout.write(`\x1B[${currentInput.length + 3}G`);
+        // 重新计算光标位置：提示符长度 + 当前输入长度
+        const promptLength = this.currentMessages.main.prompt.length;
+        process.stdout.write(`\x1B[${promptLength + currentInput.length + 1}G`);
       };
 
       // 更新显示
       const updateDisplay = () => {
+        if (isDestroyed) return;
+        
         const newFilteredCommands = this.commandManager.filterCommands(currentInput);
         
         if (showingCommands) {
@@ -234,18 +322,43 @@ export class MainPage {
 
       // 清理函数
       const cleanup = () => {
+        if (isDestroyed) return;
+        isDestroyed = true;
+        
         if (showingCommands) {
           hideCommandList();
         }
-        process.stdin.removeListener('data', onKeyPress);
+        
+        // 移除所有事件监听器
+        process.stdin.removeAllListeners('data');
+        process.stdin.removeAllListeners('error');
+        process.stdin.removeAllListeners('end');
+        
+        // 重置stdin状态
         if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
+          try {
+            process.stdin.setRawMode(false);
+          } catch (error) {
+            // 忽略错误，可能已经被重置
+          }
         }
-        process.stdin.pause();
+        
+        // 暂停stdin
+        try {
+          process.stdin.pause();
+        } catch (error) {
+          // 忽略错误
+        }
+        
+        // 移除进程退出监听器
+        process.removeListener('SIGINT', handleExit);
+        process.removeListener('SIGTERM', handleExit);
       };
 
       // 键盘事件处理
       const onKeyPress = (key: string) => {
+        if (isDestroyed) return;
+        
         try {
           const keyCode = key.charCodeAt(0);
 
@@ -276,14 +389,35 @@ export class MainPage {
               process.stdout.write('\n');
               resolve(currentInput.trim());
               return;
+            } else {
+              // 空输入，什么都不做
+              return;
             }
           }
 
           // Backspace 键
           if (keyCode === 127 || keyCode === 8) {
             if (currentInput.length > 0) {
+              // 先隐藏命令列表（如果有的话）
+              if (showingCommands) {
+                hideCommandList();
+                showingCommands = false;
+              }
+              
+              // 获取最后一个字符
+              const lastChar = currentInput.slice(-1);
               currentInput = currentInput.slice(0, -1);
-              process.stdout.write('\b \b');
+              
+              // 判断是否为多字节字符（如中文）
+              if (lastChar.charCodeAt(0) > 127) {
+                // 中文字符，需要回退更多位置
+                process.stdout.write('\b\b  \b\b');
+              } else {
+                // ASCII字符
+                process.stdout.write('\b \b');
+              }
+              
+              // 重新更新显示
               updateDisplay();
             }
             return;
@@ -318,11 +452,20 @@ export class MainPage {
             return;
           }
 
-          // 普通字符
-          if (keyCode >= 32 && keyCode <= 126) {
+          // 普通字符（支持中文等多字节字符）
+          if (key.length === 1 && keyCode >= 32) {
+            // 支持所有可打印字符，包括中文
             currentInput += key;
             process.stdout.write(key);
             updateDisplay();
+          } else if (key.length > 1) {
+            // 处理多字节字符（如中文）
+            // 过滤掉控制序列（以\x1B开头的）
+            if (!key.startsWith('\x1B')) {
+              currentInput += key;
+              process.stdout.write(key);
+              updateDisplay();
+            }
           }
         } catch (error) {
           // 捕获任何异常，避免程序崩溃
@@ -331,23 +474,41 @@ export class MainPage {
         }
       };
 
+      // 错误处理
+      const onError = (error: Error) => {
+        if (!isDestroyed) {
+          cleanup();
+          reject(error);
+        }
+      };
+
+      // 进程退出处理
+      const handleExit = () => {
+        if (!isDestroyed) {
+          cleanup();
+          resolve('/exit');
+        }
+      };
+
       // 设置原始模式和事件监听
       try {
+        // 确保stdin处于正确的状态
         if (process.stdin.isTTY) {
           process.stdin.setRawMode(true);
         }
         process.stdin.resume();
         process.stdin.setEncoding('utf8');
+        
+        // 添加事件监听器
         process.stdin.on('data', onKeyPress);
+        process.stdin.on('error', onError);
 
         // 添加进程退出监听，确保清理
-        const handleExit = () => {
-          cleanup();
-        };
-        process.once('SIGINT', handleExit);
-        process.once('SIGTERM', handleExit);
+        process.on('SIGINT', handleExit);
+        process.on('SIGTERM', handleExit);
         
       } catch (error) {
+        cleanup();
         reject(error);
       }
     });

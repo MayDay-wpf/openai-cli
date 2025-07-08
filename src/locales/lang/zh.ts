@@ -17,7 +17,20 @@ export const zh: Messages = {
       config: '配置API密钥和偏好',
       language: '切换语言设置',
       help: '查看帮助文档',
-      exit: '退出程序'
+      exit: '退出程序',
+      backToMenu: '返回欢迎页面主菜单'
+    },
+    configCheck: {
+      title: '配置检查',
+      incompleteConfig: '⚠️  配置不完整',
+      missingItems: '缺少以下配置项：',
+      baseUrl: '• API 基础地址',
+      apiKey: '• API 密钥',
+      model: '• 默认模型',
+      prompt: '请选择操作：',
+      goToConfig: '前往配置',
+      continueAnyway: '继续使用（可能无法正常工作）',
+      backToMenu: '返回主菜单'
     },
     actions: {
       startingMain: '正在启动主功能界面...',

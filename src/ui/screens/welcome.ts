@@ -3,6 +3,7 @@ import figlet from 'figlet';
 import { input } from '@inquirer/prompts';
 import { Language } from '../../types/language';
 import { languageService } from '../../services/language';
+import { StorageService } from '../../services/storage';
 import { InteractiveMenu, MenuChoice } from '../components/menu';
 import { AnimationUtils } from '../../utils/animation';
 import { HelpPage } from '../pages/help';
@@ -147,9 +148,40 @@ export class WelcomeScreen {
     
     switch (action) {
       case 'start':
-        const mainPage = new MainPage();
-        await mainPage.show();
-        break;
+        try {
+          // 检查配置是否完整
+          const configValidation = StorageService.validateApiConfig();
+          
+          if (!configValidation.isValid) {
+            // 显示配置不完整的警告
+            const shouldGoToConfig = await this.showConfigWarning(configValidation.missing);
+            
+            if (shouldGoToConfig) {
+              // 用户选择配置，跳转到配置页面
+              const configPage = new ConfigPage();
+              await configPage.show();
+              // 配置完成后重新显示欢迎页面
+              await this.show();
+            } else {
+              // 用户选择返回主菜单，清屏并重新显示整个欢迎页面
+              await this.show();
+            }
+            return;
+          }
+          
+          // 配置完整，启动主页面
+          const mainPage = new MainPage();
+          await mainPage.show();
+          // 确保MainPage实例被正确清理
+          mainPage.destroy();
+          // 对话页面结束后，直接重新显示欢迎页面，不需要等待用户按键
+          await this.show();
+        } catch (error) {
+          console.error('  ' + chalk.red('对话页面出现错误:'), error);
+          // 出错时也重新显示欢迎页面
+          await this.show();
+        }
+        return;
         
       case 'config':
         const configPage = new ConfigPage();
@@ -165,6 +197,17 @@ export class WelcomeScreen {
       case 'help':
         const helpPage = new HelpPage();
         await helpPage.show();
+        // 帮助页面结束后，等待用户按键继续
+        console.log();
+        await input({
+          message: '  ' + chalk.gray(messages.welcome.actions.pressEnter)
+        });
+        
+        // 强制清屏后重新显示完整的欢迎页面
+        process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
+        console.clear();
+        process.stdout.write('\x1Bc');
+        await this.show();
         break;
         
       case 'exit':
@@ -173,20 +216,7 @@ export class WelcomeScreen {
         
       default:
         console.log('  ' + chalk.red(messages.welcome.actions.unknownAction));
-    }
-    
-    // 对于start和help选项，等待用户按键继续
-    if (action === 'start' || action === 'help') {
-      console.log();
-      await input({
-        message: '  ' + chalk.gray(messages.welcome.actions.pressEnter)
-      });
-      
-      // 强制清屏后重新显示完整的欢迎页面
-      process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
-      console.clear();
-      process.stdout.write('\x1Bc');
-      await this.show();
+        await this.showMainMenu();
     }
   }
 
@@ -227,5 +257,56 @@ export class WelcomeScreen {
     await AnimationUtils.showExitAnimation(farewell, messages.welcome.actions.farewell);
     
     process.exit(0);
+  }
+
+  private async showConfigWarning(missingItems: string[]): Promise<boolean> {
+    const messages = languageService.getMessages();
+    const configCheck = messages.welcome.configCheck;
+    
+    // 显示配置警告
+    console.log();
+    console.log('  ' + chalk.yellow.bold(configCheck.incompleteConfig));
+    console.log();
+    console.log('  ' + chalk.gray(configCheck.missingItems));
+    
+    // 显示缺少的配置项
+    missingItems.forEach(item => {
+      let itemName = '';
+      switch (item) {
+        case 'baseUrl':
+          itemName = configCheck.baseUrl;
+          break;
+        case 'apiKey':
+          itemName = configCheck.apiKey;
+          break;
+        case 'model':
+          itemName = configCheck.model;
+          break;
+      }
+      console.log('    ' + chalk.red(itemName));
+    });
+    
+    console.log();
+    
+    // 显示选择菜单 - 只允许前往配置或返回主菜单
+    const choices: MenuChoice[] = [
+      {
+        name: configCheck.goToConfig,
+        value: 'config',
+        description: messages.welcome.menuDescription.config
+      },
+      {
+        name: configCheck.backToMenu,
+        value: 'back',
+        description: messages.welcome.menuDescription.backToMenu
+      }
+    ];
+
+    const choice = await InteractiveMenu.show({
+      message: '  ' + configCheck.prompt,
+      choices
+    });
+
+    return choice === 'config';
   }
 } 

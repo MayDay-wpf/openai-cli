@@ -17,7 +17,20 @@ export const en: Messages = {
       config: 'Configure API keys and preferences',
       language: 'Switch language settings',
       help: 'View help documentation',
-      exit: 'Exit program'
+      exit: 'Exit program',
+      backToMenu: 'Return to welcome page main menu'
+    },
+    configCheck: {
+      title: 'Configuration Check',
+      incompleteConfig: '⚠️  Incomplete Configuration',
+      missingItems: 'Missing configuration items:',
+      baseUrl: '• API Base URL',
+      apiKey: '• API Key',
+      model: '• Default Model',
+      prompt: 'Please select an action:',
+      goToConfig: 'Go to Configuration',
+      continueAnyway: 'Continue Anyway (may not work properly)',
+      backToMenu: 'Back to Main Menu'
     },
     actions: {
       startingMain: 'Launching main interface...',
