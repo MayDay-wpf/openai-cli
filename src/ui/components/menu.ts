@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import inquirer from 'inquirer';
+import { select } from '@inquirer/prompts';
 
 export interface MenuChoice {
   name: string;
@@ -14,30 +14,19 @@ export interface MenuOptions {
 
 export class GeminiStyleMenu {
   static async show(options: MenuOptions): Promise<string> {
-    // 使用inquirer的rawlist类型来自定义样式
-    const customChoices = options.choices.map((choice, index) => ({
+    // 使用新的@inquirer/prompts的select
+    const choices = options.choices.map(choice => ({
       name: this.formatChoice(choice, false),
       value: choice.value,
-      short: choice.name
+      description: choice.description
     }));
 
-    const result = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'selection',
-        message: options.message,
-        choices: customChoices,
-        pageSize: options.choices.length + 2,
-        loop: false,
-        prefix: '',
-        // 自定义选择器样式
-        transformer: (input: string, answers: any, options: any) => {
-          return input;
-        }
-      }
-    ]);
+    const result = await select({
+      message: options.message,
+      choices
+    });
 
-    return result.selection;
+    return result;
   }
 
   private static formatChoice(choice: MenuChoice, isSelected: boolean): string {

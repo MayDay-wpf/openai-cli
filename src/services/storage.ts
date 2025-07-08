@@ -1,0 +1,175 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { Language } from '../types/language';
+
+export interface ApiConfig {
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+}
+
+/**
+ * 配置存储服务
+ * 处理用户偏好设置的持久化
+ */
+export class StorageService {
+  private static readonly CONFIG_DIR = path.join(os.homedir(), '.openai-cli');
+  private static readonly CONFIG_FILE = path.join(StorageService.CONFIG_DIR, 'config.json');
+
+  /**
+   * 确保配置目录存在
+   */
+  private static ensureConfigDir(): void {
+    if (!fs.existsSync(StorageService.CONFIG_DIR)) {
+      fs.mkdirSync(StorageService.CONFIG_DIR, { recursive: true });
+    }
+  }
+
+  /**
+   * 读取配置文件
+   */
+  private static readConfig(): Record<string, any> {
+    try {
+      if (fs.existsSync(StorageService.CONFIG_FILE)) {
+        const content = fs.readFileSync(StorageService.CONFIG_FILE, 'utf8');
+        return JSON.parse(content);
+      }
+    } catch (error) {
+      console.warn('Failed to read config file:', error);
+    }
+    return {};
+  }
+
+  /**
+   * 写入配置文件
+   */
+  private static writeConfig(config: Record<string, any>): void {
+    try {
+      StorageService.ensureConfigDir();
+      fs.writeFileSync(StorageService.CONFIG_FILE, JSON.stringify(config, null, 2));
+    } catch (error) {
+      console.warn('Failed to write config file:', error);
+    }
+  }
+
+  /**
+   * 获取保存的语言设置
+   */
+  static getSavedLanguage(): Language | null {
+    const config = StorageService.readConfig();
+    return config.language || null;
+  }
+
+  /**
+   * 保存语言设置
+   */
+  static saveLanguage(language: Language): void {
+    const config = StorageService.readConfig();
+    config.language = language;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 获取API配置
+   */
+  static getApiConfig(): ApiConfig {
+    const config = StorageService.readConfig();
+    return {
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      model: config.model
+    };
+  }
+
+  /**
+   * 保存API基础地址
+   */
+  static saveBaseUrl(baseUrl: string): void {
+    const config = StorageService.readConfig();
+    config.baseUrl = baseUrl;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 保存API密钥
+   */
+  static saveApiKey(apiKey: string): void {
+    const config = StorageService.readConfig();
+    config.apiKey = apiKey;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 保存默认模型
+   */
+  static saveModel(model: string): void {
+    const config = StorageService.readConfig();
+    config.model = model;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 批量保存API配置
+   */
+  static saveApiConfig(apiConfig: ApiConfig): void {
+    const config = StorageService.readConfig();
+    if (apiConfig.baseUrl !== undefined) config.baseUrl = apiConfig.baseUrl;
+    if (apiConfig.apiKey !== undefined) config.apiKey = apiConfig.apiKey;
+    if (apiConfig.model !== undefined) config.model = apiConfig.model;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 获取所有配置
+   */
+  static getConfig(): Record<string, any> {
+    return StorageService.readConfig();
+  }
+
+  /**
+   * 设置配置项
+   */
+  static setConfig(key: string, value: any): void {
+    const config = StorageService.readConfig();
+    config[key] = value;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 清除配置文件
+   */
+  static clearConfig(): void {
+    try {
+      if (fs.existsSync(StorageService.CONFIG_FILE)) {
+        fs.unlinkSync(StorageService.CONFIG_FILE);
+      }
+    } catch (error) {
+      console.warn('Failed to clear config file:', error);
+    }
+  }
+
+  /**
+   * 检查配置是否存在
+   */
+  static hasConfig(): boolean {
+    return fs.existsSync(StorageService.CONFIG_FILE);
+  }
+
+  /**
+   * 验证API配置完整性
+   */
+  static validateApiConfig(): { isValid: boolean; missing: string[] } {
+    const config = StorageService.getApiConfig();
+    const missing: string[] = [];
+    
+    if (!config.baseUrl) missing.push('baseUrl');
+    if (!config.apiKey) missing.push('apiKey');
+    if (!config.model) missing.push('model');
+    
+    return {
+      isValid: missing.length === 0,
+      missing
+    };
+  }
+} 

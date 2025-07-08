@@ -1,8 +1,8 @@
 import chalk from 'chalk';
 import figlet from 'figlet';
-import inquirer from 'inquirer';
-import { Language, LANGUAGES } from '../../types/language';
-import { getCurrentMessages, getAvailableLanguages } from '../../locales';
+import { input } from '@inquirer/prompts';
+import { Language } from '../../types/language';
+import { languageService } from '../../services/language';
 import { InteractiveMenu, MenuChoice } from '../components/menu';
 import { AnimationUtils } from '../../utils/animation';
 import { HelpPage } from '../pages/help';
@@ -10,7 +10,6 @@ import { ConfigPage } from '../pages/config';
 import { MainPage } from '../pages/main';
 
 export class WelcomeScreen {
-  private currentLanguage: Language = 'zh';
   private readonly gradients = AnimationUtils.getGradients();
   
   async show(): Promise<void> {
@@ -18,10 +17,12 @@ export class WelcomeScreen {
     await this.showMainMenu();
   }
 
+
+
   private async showSplashScreen(): Promise<void> {
     // 隐藏光标减少闪烁
     process.stdout.write('\x1B[?25l');
-    console.clear();
+    AnimationUtils.forceClearScreen();
     
     // 显示加载动画
     await this.showLoadingAnimation();
@@ -40,18 +41,15 @@ export class WelcomeScreen {
   }
 
   private async showLoadingAnimation(): Promise<void> {
-    const messages = getCurrentMessages(this.currentLanguage);
-    
-    // 添加一些空行来为加载动画预留空间
-    console.log('\n'.repeat(3));
+    const messages = languageService.getMessages();
     
     // 使用统一的动画工具
-    await AnimationUtils.showLoadingAnimation({
+    const controller = AnimationUtils.showLoadingAnimation({
       text: messages.welcome.starting,
-      duration: 2000,
-      successText: messages.welcome.startComplete
+      interval: 80
     });
-    console.log();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    controller.stop();
   }
 
   private showGrandTitle(): void {
@@ -73,13 +71,13 @@ export class WelcomeScreen {
     });
     
     // 使用多层渐变效果
-    console.log(this.gradients.primary.multiline(title1));
-    console.log(this.gradients.accent.multiline(title2));
+    console.log(this.gradients.primary(title1));
+    console.log(this.gradients.accent(title2));
     console.log();
     
     // 添加版本信息和徽章
-    const versionBadge = '  [ v1.0.0 ] ';
-    const statusBadge = '  [ STABLE ] ';
+    const versionBadge = '  [ v0.0.2 ] ';
+    const statusBadge = '  [ BETA ] ';
     const aiBadge = '  [ AI-POWERED ] ';
     
     console.log(
@@ -92,11 +90,10 @@ export class WelcomeScreen {
   }
 
   private showDescription(): void {
-    const messages = getCurrentMessages(this.currentLanguage);
+    const messages = languageService.getMessages();
     
     // 主标题和副标题
-    console.log('  ' + this.gradients.primary(messages.welcome.subtitle));
-    console.log('  ' + chalk.gray(messages.welcome.description));
+    console.log('  ' + this.gradients.primary(messages.welcome.tagline));
     console.log();
   }
 
@@ -106,7 +103,7 @@ export class WelcomeScreen {
   }
 
   private async showMainMenu(): Promise<void> {
-    const messages = getCurrentMessages(this.currentLanguage);
+    const messages = languageService.getMessages();
     
     const choices: MenuChoice[] = [
       {
@@ -145,26 +142,28 @@ export class WelcomeScreen {
   }
 
   private async handleMenuSelection(action: string): Promise<void> {
-    const messages = getCurrentMessages(this.currentLanguage);
+    const messages = languageService.getMessages();
     console.log();
     
     switch (action) {
       case 'start':
-        const mainPage = new MainPage(this.currentLanguage);
+        const mainPage = new MainPage();
         await mainPage.show();
         break;
         
       case 'config':
-        const configPage = new ConfigPage(this.currentLanguage);
+        const configPage = new ConfigPage();
         await configPage.show();
-        break;
+        // 配置页面完成后，重新显示完整的欢迎页
+        await this.show();
+        return;
         
       case 'language':
         await this.handleLanguageSelection();
         return; // 直接返回，语言切换后会重新显示界面
         
       case 'help':
-        const helpPage = new HelpPage(this.currentLanguage);
+        const helpPage = new HelpPage();
         await helpPage.show();
         break;
         
@@ -176,41 +175,34 @@ export class WelcomeScreen {
         console.log('  ' + chalk.red(messages.welcome.actions.unknownAction));
     }
     
-    // 等待用户按键继续
-    console.log();
-    await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'continue',
-        message: '  ' + chalk.gray(messages.welcome.actions.pressEnter),
-        prefix: '  '
-      }
-    ]);
-    
-    // 重新显示菜单（除非是退出）
-    await this.showMainMenu();
+    // 对于start和help选项，等待用户按键继续
+    if (action === 'start' || action === 'help') {
+      console.log();
+      await input({
+        message: '  ' + chalk.gray(messages.welcome.actions.pressEnter)
+      });
+      
+      // 强制清屏后重新显示完整的欢迎页面
+      process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
+      console.clear();
+      process.stdout.write('\x1Bc');
+      await this.show();
+    }
   }
 
   private async handleLanguageSelection(): Promise<void> {
-    const availableLanguages = getAvailableLanguages();
-    const choices: MenuChoice[] = availableLanguages.map(code => {
-      const config = LANGUAGES[code];
-      return {
-        name: config.nativeName,
-        value: code,
-        description: config.name
-      };
-    });
+    const choices = languageService.createLanguageMenuChoices();
 
     const selectedLanguage = await InteractiveMenu.show({
       message: 'Select Language / 选择语言:',
       choices
     }) as Language;
 
-    if (selectedLanguage !== this.currentLanguage) {
-      this.currentLanguage = selectedLanguage;
+    const currentLanguage = languageService.getCurrentLanguage();
+    if (selectedLanguage !== currentLanguage) {
+      languageService.setLanguage(selectedLanguage);
       
-      const messages = getCurrentMessages(this.currentLanguage);
+      const messages = languageService.getMessages();
       await AnimationUtils.showActionAnimation(messages.welcome.actions.changingLanguage);
       
       // 重新显示整个界面
@@ -221,7 +213,8 @@ export class WelcomeScreen {
   }
 
   private async showExitAnimation(): Promise<void> {
-    const messages = getCurrentMessages(this.currentLanguage);
+    console.log('\n'.repeat(5));
+    const messages = languageService.getMessages();
     
     // 显示告别消息
     const farewell = figlet.textSync('GOODBYE', {

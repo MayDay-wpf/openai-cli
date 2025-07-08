@@ -19,10 +19,6 @@ export const LANGUAGES: Record<Language, LanguageConfig> = {
 export interface Messages {
   welcome: {
     starting: string;
-    startComplete: string;
-    title: string;
-    subtitle: string;
-    description: string;
     tagline: string;
     menuPrompt: string;
     menuOptions: {
@@ -56,14 +52,123 @@ export interface Messages {
         version: string;
         help: string;
       };
-      features: string;
-      featureList: {
-        codeGen: string;
-        review: string;
-        refactor: string;
-        debug: string;
+    };
+  };
+  main: {
+    title: string;
+    subtitle: string;
+    welcomeBox: {
+      title: string;
+      description: string;
+    };
+    prompt: string;
+    status: {
+      cannotSendMessage: string;
+      thinking: string;
+    };
+    commands: {
+      exit: {
+        name: string;
+        description: string;
       };
-      moreFeatures: string;
+      clear: {
+        name: string;
+        description: string;
+      };
+      help: {
+        name: string;
+        description: string;
+      };
+      config: {
+        name: string;
+        description: string;
+      };
+      history: {
+        name: string;
+        description: string;
+      };
+    };
+    messages: {
+      configInDevelopment: string;
+      noHistory: string;
+      historyTitle: string;
+      totalMessages: string;
+      user: string;
+      ai: string;
+    };
+    help: {
+      title: string;
+      availableCommands: string;
+      smartInput: {
+        title: string;
+        showMenu: string;
+        matchCommands: string;
+        directExecute: string;
+        navigation: string;
+      };
+    };
+    responses: {
+      understanding: string;
+      goodQuestion: string;
+      bestSolution: string;
+      analyzeRoot: string;
+      implementSteps: string;
+    };
+  };
+  config: {
+    title: string;
+    subtitle: string;
+    menuPrompt: string;
+    menuOptions: {
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      viewConfig: string;
+      resetConfig: string;
+      back: string;
+    };
+    menuDescription: {
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      viewConfig: string;
+      resetConfig: string;
+      back: string;
+    };
+    prompts: {
+      baseUrlInput: string;
+      apiKeyInput: string;
+      modelInput: string;
+      baseUrlPlaceholder: string;
+      apiKeyPlaceholder: string;
+      modelPlaceholder: string;
+      confirmReset: string;
+    };
+    messages: {
+      configSaved: string;
+      configReset: string;
+      resetCancelled: string;
+      invalidInput: string;
+      currentConfig: string;
+      noConfigFound: string;
+    };
+    labels: {
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      status: string;
+      configured: string;
+      notConfigured: string;
+    };
+    actions: {
+      saving: string;
+      resetting: string;
+      loading: string;
+      custom: string;
+      cancel: string;
+      pressEnter: string;
+      yes: string;
+      no: string;
     };
   };
 } 
