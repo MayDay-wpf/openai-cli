@@ -73,33 +73,23 @@ export interface Messages {
     welcomeBox: {
       title: string;
       description: string;
+      configInfo: string;
     };
     prompt: string;
     status: {
       cannotSendMessage: string;
       thinking: string;
+      configMissing: string;
+      connectionError: string;
+      streamingResponse: string;
     };
     commands: {
-      exit: {
-        name: string;
-        description: string;
-      };
-      clear: {
-        name: string;
-        description: string;
-      };
-      help: {
-        name: string;
-        description: string;
-      };
-      config: {
-        name: string;
-        description: string;
-      };
-      history: {
-        name: string;
-        description: string;
-      };
+      exit: { name: string; description: string };
+      clear: { name: string; description: string };
+      help: { name: string; description: string };
+      config: { name: string; description: string };
+      history: { name: string; description: string };
+      init: { name: string; description: string };
     };
     messages: {
       configInDevelopment: string;
@@ -117,8 +107,17 @@ export interface Messages {
         showMenu: string;
         matchCommands: string;
         directExecute: string;
+        fileSearch: string;
+        showFileSearch: string;
+        matchFileSearch: string;
         navigation: string;
       };
+    };
+    fileSearch: {
+      title: string;
+      commands: string;
+      file: string;
+      directory: string;
     };
     responses: {
       understanding: string;
@@ -126,6 +125,26 @@ export interface Messages {
       bestSolution: string;
       analyzeRoot: string;
       implementSteps: string;
+    };
+    init: {
+      configIncomplete: string;
+      missingItems: string;
+      useConfig: string;
+      starting: string;
+      phases: {
+        scanning: string;
+        analyzing: string;
+        generating: string;
+        consolidating: string;
+      };
+      completed: string;
+      savedTo: string;
+      description: string;
+      failed: string;
+      interrupted: string;
+      resuming: string;
+      progressSaved: string;
+      ctrlcToCancel: string;
     };
   };
   config: {
@@ -136,6 +155,8 @@ export interface Messages {
       baseUrl: string;
       apiKey: string;
       model: string;
+      contextTokens: string;
+      maxConcurrency: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -144,6 +165,8 @@ export interface Messages {
       baseUrl: string;
       apiKey: string;
       model: string;
+      contextTokens: string;
+      maxConcurrency: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -152,9 +175,13 @@ export interface Messages {
       baseUrlInput: string;
       apiKeyInput: string;
       modelInput: string;
+      contextTokensInput: string;
+      maxConcurrencyInput: string;
       baseUrlPlaceholder: string;
       apiKeyPlaceholder: string;
       modelPlaceholder: string;
+      contextTokensPlaceholder: string;
+      maxConcurrencyPlaceholder: string;
       confirmReset: string;
     };
     messages: {
@@ -169,6 +196,8 @@ export interface Messages {
       baseUrl: string;
       apiKey: string;
       model: string;
+      contextTokens: string;
+      maxConcurrency: string;
       status: string;
       configured: string;
       notConfigured: string;
@@ -182,6 +211,53 @@ export interface Messages {
       pressEnter: string;
       yes: string;
       no: string;
+    };
+  };
+  // 添加项目初始化和文档查询的多语言支持
+  projectInit: {
+    errors: {
+      loadFailed: string;
+      documentNotFound: string;
+      parseFailed: string;
+      tokenCalculationFailed: string;
+    };
+    prompts: {
+      systemAnalyzer: string;
+      systemFileAnalyzer: string;
+      userAnalyzeProject: string;
+      userAnalyzeFile: string;
+    };
+    warnings: {
+      contentTruncated: string;
+      fallbackEncoding: string;
+    };
+    info: {
+      batchDelay: string;
+      progressSaved: string;
+    };
+  };
+  projectDoc: {
+    errors: {
+      documentNotFound: string;
+      loadFailed: string;
+      invalidFormat: string;
+      fuzzyMatchNotFound: string;
+    };
+    warnings: {
+      cacheExpired: string;
+      noContent: string;
+    };
+    info: {
+      cacheHit: string;
+      exportCompleted: string;
+    };
+    stats: {
+      totalFiles: string;
+      fileTypes: string;
+      avgSize: string;
+      totalSize: string;
+      topTags: string;
+      mostConnected: string;
     };
   };
 } 

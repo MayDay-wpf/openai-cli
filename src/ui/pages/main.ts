@@ -2,9 +2,11 @@ import chalk from 'chalk';
 import boxen from 'boxen';
 import { input } from '@inquirer/prompts';
 import { select } from '@inquirer/prompts';
-import { AnimationUtils, LoadingController } from '../../utils/animation';
-import { CommandManager, HelpManager, ResponseManager, Command } from '../components';
+import { AnimationUtils, LoadingController, StringUtils, renderMarkdown } from '../../utils';
+import { CommandManager, HelpManager, ResponseManager, Command, FileSearchManager, FileSearchResult, InputHandler, InputState, InputSuggestion, InitHandler } from '../components';
 import { languageService } from '../../services/language';
+import { StorageService } from '../../services/storage';
+import { openAIService, ChatMessage } from '../../services/openai';
 import { Messages } from '../../types/language';
 
 interface Message {
@@ -26,11 +28,14 @@ export class MainPage {
   };
   private loadingController: LoadingController | null = null;
   private isDestroyed = false;
-  
+
   // 组件管理器
   private commandManager: CommandManager;
   private helpManager: HelpManager;
   private responseManager: ResponseManager;
+  private fileSearchManager: FileSearchManager;
+  private inputHandler: InputHandler;
+  private initHandler: InitHandler;
   private currentMessages: Messages;
 
   constructor() {
@@ -38,7 +43,14 @@ export class MainPage {
     this.commandManager = new CommandManager(this.currentMessages);
     this.helpManager = new HelpManager(this.currentMessages);
     this.responseManager = new ResponseManager(this.currentMessages);
-    
+    this.fileSearchManager = new FileSearchManager();
+    this.inputHandler = new InputHandler(
+      this.commandManager,
+      this.fileSearchManager,
+      this.currentMessages
+    );
+    this.initHandler = new InitHandler(this.currentMessages);
+
     // 监听语言变化
     languageService.onLanguageChange((language) => {
       this.updateLanguage();
@@ -49,19 +61,22 @@ export class MainPage {
   destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
-    
+
     // 停止loading动画
     if (this.loadingController) {
       this.loadingController.stop();
       this.loadingController = null;
     }
-    
+
     // 重置聊天状态
     this.setChatState({ canSendMessage: false, isProcessing: false });
-    
+
     // 清空消息
     this.messages = [];
-    
+
+    // 清除选中文件列表
+    this.clearSelectedFiles();
+
     // 清理stdin状态
     if (process.stdin.isTTY) {
       try {
@@ -70,12 +85,12 @@ export class MainPage {
         // 忽略错误
       }
     }
-    
+
     // 移除所有可能的事件监听器
     process.stdin.removeAllListeners('data');
     process.stdin.removeAllListeners('error');
     process.stdin.removeAllListeners('end');
-    
+
     try {
       process.stdin.pause();
     } catch (error) {
@@ -88,6 +103,8 @@ export class MainPage {
     this.commandManager.updateLanguage(this.currentMessages);
     this.helpManager.updateLanguage(this.currentMessages);
     this.responseManager.updateLanguage(this.currentMessages);
+    this.inputHandler.updateLanguage(this.currentMessages);
+    this.initHandler.updateLanguage(this.currentMessages);
   }
 
   // 公开API：注入AI回复
@@ -104,7 +121,9 @@ export class MainPage {
       timestamp: new Date()
     };
     this.messages.push(aiMessage);
-    this.displayMessage(aiMessage);
+    
+    // 使用 Markdown 渲染显示 AI 回复
+    this.displayAIResponse(content);
   }
 
   // 公开API：设置聊天状态
@@ -115,6 +134,16 @@ export class MainPage {
   // 公开API：获取聊天状态
   getChatState(): ChatState {
     return { ...this.chatState };
+  }
+
+  // 公开API：获取当前选中的文件列表
+  getSelectedFiles(): string[] {
+    return this.inputHandler.getSelectedFiles();
+  }
+
+  // 公开API：清除选中文件列表
+  clearSelectedFiles(): void {
+    this.inputHandler.clearSelectedFiles();
   }
 
   async show(): Promise<void> {
@@ -129,11 +158,11 @@ export class MainPage {
       this.messages = [];
       this.loadingController = null;
     }
-    
+
     // 强制清屏，确保完全清除欢迎页面内容
     process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
     process.stdout.write('\x1Bc');
-    
+
     // 确保stdin处于正确状态
     try {
       if (process.stdin.isTTY) {
@@ -146,25 +175,37 @@ export class MainPage {
     } catch (error) {
       // 忽略清理错误
     }
-    
+
     const main = this.currentMessages.main;
-    
+
+    // 获取当前配置信息
+    const currentDir = process.cwd();
+    const apiConfig = StorageService.getApiConfig();
+
+    // 构建配置信息显示文本
+    const configInfo = main.welcomeBox.configInfo
+      .replace('{currentDir}', currentDir)
+      .replace('{baseUrl}', apiConfig.baseUrl || 'unknown')
+      .replace('{apiKey}', apiConfig.apiKey ? StringUtils.maskApiKey(apiConfig.apiKey) : 'unknown');
+
     // 欢迎方框
     const welcomeBox = boxen(
-      chalk.bold(main.title + '\n\n') +
-      chalk.gray(main.subtitle),
+      chalk.hex('#FF6B6B').bold(main.title + '\n\n') +
+      chalk.hex('#4ECDC4').italic(main.subtitle) + '\n\n' +
+      chalk.hex('#45B7D1')('─'.repeat(50)) + '\n' +
+      configInfo,
       {
         padding: 1,
         margin: 1,
-        borderStyle: 'round',
-        borderColor: 'cyan',
+        borderStyle: 'double',
+        borderColor: 'magenta',
         title: main.welcomeBox.title,
         titleAlignment: 'center'
       }
     );
-    
+
     process.stdout.write(welcomeBox + '\n\n');
-    
+
     // 开始聊天循环
     await this.startChatLoop();
   }
@@ -176,7 +217,7 @@ export class MainPage {
         if (this.isDestroyed) {
           break;
         }
-        
+
         // 检查是否可以发送消息
         if (!this.chatState.canSendMessage) {
           process.stdout.write(chalk.red(this.currentMessages.main.status.cannotSendMessage + '\n'));
@@ -186,13 +227,15 @@ export class MainPage {
 
         // 获取用户输入
         const userInput = await this.getUserInput();
-        
+
         if (userInput === '/exit') {
           break;
         }
 
         if (userInput === '/clear') {
           this.messages = [];
+          // 清除选中文件列表
+          this.clearSelectedFiles();
           // 强制清屏
           process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
           process.stdout.write('\x1Bc');
@@ -214,11 +257,17 @@ export class MainPage {
           continue;
         }
 
+        if (userInput === '/init') {
+          await this.handleInitCommand();
+          continue;
+        }
+
+
         // 添加用户消息并直接显示
         this.addUserMessage(userInput);
-        
-        // 模拟AI处理
-        await this.simulateAIProcessing();
+
+        // 处理AI请求
+        await this.processAIRequest();
       }
     } catch (error) {
       console.error('聊天循环出现错误:', error);
@@ -229,16 +278,46 @@ export class MainPage {
   }
 
   private displayMessage(message: Message): void {
-    const timeStr = message.timestamp.toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    const timeStr = message.timestamp.toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
 
-    // 只显示AI回复，用户消息在输入时已经显示，这里只保存到历史记录
-    if (message.type === 'ai') {
-      // 确保在新行显示AI回复
+    if (message.type === 'user') {
+      // 显示用户消息
+      const userLabel = this.currentMessages.main.messages.user;
+      process.stdout.write(chalk.blue(`${userLabel} [${timeStr}]: `) + chalk.white(message.content) + '\n');
+    } else if (message.type === 'ai') {
+      // 这个方法主要用于历史记录显示，AI回复使用 displayAIResponse
       const aiLabel = this.currentMessages.main.messages.ai;
       process.stdout.write(chalk.green(`${aiLabel} [${timeStr}]: `) + chalk.white(message.content) + '\n\n');
+    }
+  }
+
+  /**
+   * 显示 AI 回复，支持 Markdown 渲染
+   */
+  private displayAIResponse(content: string): void {
+    const timeStr = new Date().toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    const aiLabel = this.currentMessages.main.messages.ai;
+    
+    try {
+      // 渲染 Markdown 内容
+      const renderedContent = renderMarkdown(content);
+      
+      // 显示AI标签和渲染后的内容
+      process.stdout.write(chalk.green(`${aiLabel} [${timeStr}]:\n\n`));
+      process.stdout.write(renderedContent);
+      process.stdout.write('\n');
+    } catch (error) {
+      // 如果渲染失败，显示原始内容
+      console.error('Markdown 渲染失败:', error);
+      process.stdout.write(chalk.green(`${aiLabel} [${timeStr}]: `));
+      process.stdout.write(chalk.white(content) + '\n\n');
     }
   }
 
@@ -247,76 +326,96 @@ export class MainPage {
     if (this.isDestroyed) {
       return '/exit';
     }
-    
-    return new Promise((resolve, reject) => {
+
+    return new Promise(async (resolve, reject) => {
       let currentInput = '';
-      let showingCommands = false;
-      let filteredCommands: Command[] = [];
-      let selectedIndex = 0;
+      let currentState: InputState | null = null;
       let isDestroyed = false;
 
       // 显示初始提示符
       process.stdout.write(chalk.cyan(this.currentMessages.main.prompt));
 
-      // 显示指令列表
-      const showCommandList = (commands: Command[]) => {
-        if (commands.length === 0 || isDestroyed) return;
-        
-        process.stdout.write('\n');
-        commands.forEach((cmd, index) => {
-          const isSelected = index === selectedIndex;
-          const prefix = isSelected ? chalk.cyan('❯ ') : '  ';
-          const cmdText = isSelected 
-            ? chalk.cyan.bold(cmd.value) + ' - ' + chalk.white.bold(cmd.description)
-            : chalk.gray(cmd.value) + ' - ' + chalk.gray(cmd.description);
-          process.stdout.write(prefix + cmdText + '\n');
+      // 显示建议列表
+      const showSuggestions = (state: InputState) => {
+        if (!state.showingSuggestions || state.suggestions.length === 0 || isDestroyed) return;
+
+        // 显示标题
+        const title = this.inputHandler.getSuggestionTitle(state.suggestionsType);
+        if (title) {
+          process.stdout.write('\n' + title + '\n');
+        } else {
+          process.stdout.write('\n');
+        }
+
+        // 显示建议
+        const renderedSuggestions = this.inputHandler.renderSuggestions(
+          state.suggestions,
+          state.selectedIndex
+        );
+
+        renderedSuggestions.forEach(suggestion => {
+          process.stdout.write(suggestion + '\n');
         });
-        
+
         // 返回到输入行
-        process.stdout.write(`\x1B[${commands.length + 1}A`);
+        const linesToGoUp = renderedSuggestions.length + (title ? 2 : 1);
+        process.stdout.write(`\x1B[${linesToGoUp}A`);
+
         // 重新计算光标位置：提示符长度 + 当前输入长度
         const promptLength = this.currentMessages.main.prompt.length;
         process.stdout.write(`\x1B[${promptLength + currentInput.length + 1}G`);
       };
 
-      // 隐藏指令列表
-      const hideCommandList = () => {
-        if (!showingCommands || filteredCommands.length === 0 || isDestroyed) return;
-        
-        // 移动到指令列表开始位置并清除
+      // 隐藏建议列表
+      const hideSuggestions = () => {
+        if (!currentState?.showingSuggestions || currentState.suggestions.length === 0 || isDestroyed) return;
+
+        // 移动到建议列表开始位置并清除
         process.stdout.write('\x1B[1B'); // 下移一行到列表开始
-        for (let i = 0; i < filteredCommands.length; i++) {
+
+        // 清除标题行（如果有）
+        const hasTitle = !!this.inputHandler.getSuggestionTitle(currentState.suggestionsType);
+        if (hasTitle) {
+          process.stdout.write('\x1B[2K'); // 清除标题行
+          process.stdout.write('\x1B[1B'); // 下移到建议开始
+        }
+
+        // 清除所有建议行
+        for (let i = 0; i < currentState.suggestions.length; i++) {
           process.stdout.write('\x1B[2K'); // 清除整行
-          if (i < filteredCommands.length - 1) {
+          if (i < currentState.suggestions.length - 1) {
             process.stdout.write('\x1B[1B'); // 下移一行
           }
         }
-        
-        // 返回到输入行，光标定位到提示符后的正确位置
-        process.stdout.write(`\x1B[${filteredCommands.length}A`);
-        // 重新计算光标位置：提示符长度 + 当前输入长度
+
+        // 返回到输入行
+        const linesToGoUp = currentState.suggestions.length + (hasTitle ? 1 : 0);
+        process.stdout.write(`\x1B[${linesToGoUp}A`);
+
+        // 重新计算光标位置
         const promptLength = this.currentMessages.main.prompt.length;
         process.stdout.write(`\x1B[${promptLength + currentInput.length + 1}G`);
       };
 
       // 更新显示
-      const updateDisplay = () => {
+      const updateDisplay = async () => {
         if (isDestroyed) return;
-        
-        const newFilteredCommands = this.commandManager.filterCommands(currentInput);
-        
-        if (showingCommands) {
-          hideCommandList();
+
+        // 更新选中文件列表
+        this.inputHandler.updateSelectedFiles(currentInput);
+
+        // 隐藏当前建议
+        if (currentState?.showingSuggestions) {
+          hideSuggestions();
         }
-        
-        if (currentInput.startsWith('/') && newFilteredCommands.length > 0) {
-          filteredCommands = newFilteredCommands;
-          selectedIndex = Math.min(selectedIndex, filteredCommands.length - 1);
-          showingCommands = true;
-          showCommandList(filteredCommands);
-        } else {
-          showingCommands = false;
-          filteredCommands = [];
+
+        // 获取新状态
+        const newState = await this.inputHandler.analyzInput(currentInput);
+        currentState = newState;
+
+        // 显示新建议
+        if (newState.showingSuggestions) {
+          showSuggestions(newState);
         }
       };
 
@@ -324,16 +423,16 @@ export class MainPage {
       const cleanup = () => {
         if (isDestroyed) return;
         isDestroyed = true;
-        
-        if (showingCommands) {
-          hideCommandList();
+
+        if (currentState?.showingSuggestions) {
+          hideSuggestions();
         }
-        
+
         // 移除所有事件监听器
         process.stdin.removeAllListeners('data');
         process.stdin.removeAllListeners('error');
         process.stdin.removeAllListeners('end');
-        
+
         // 重置stdin状态
         if (process.stdin.isTTY) {
           try {
@@ -342,23 +441,23 @@ export class MainPage {
             // 忽略错误，可能已经被重置
           }
         }
-        
+
         // 暂停stdin
         try {
           process.stdin.pause();
         } catch (error) {
           // 忽略错误
         }
-        
+
         // 移除进程退出监听器
         process.removeListener('SIGINT', handleExit);
         process.removeListener('SIGTERM', handleExit);
       };
 
       // 键盘事件处理
-      const onKeyPress = (key: string) => {
+      const onKeyPress = async (key: string) => {
         if (isDestroyed) return;
-        
+
         try {
           const keyCode = key.charCodeAt(0);
 
@@ -372,17 +471,40 @@ export class MainPage {
 
           // Enter 键
           if (keyCode === 13) {
-            if (showingCommands && filteredCommands.length > 0) {
-              // 选择当前高亮的指令
-              const selectedCommand = filteredCommands[selectedIndex].value;
-              cleanup();
-              
-              // 清除当前行并重新显示
-              process.stdout.write('\x1B[2K\x1B[0G');
-              process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + selectedCommand + '\n');
-              
-              resolve(selectedCommand);
-              return;
+            if (currentState?.showingSuggestions && currentState.suggestions.length > 0) {
+              // 选择当前高亮的建议
+              const selectedSuggestion = currentState.suggestions[currentState.selectedIndex];
+              const newInput = this.inputHandler.handleSuggestionSelection(currentInput, selectedSuggestion);
+
+              if (selectedSuggestion.type === 'command') {
+                // 命令类型直接执行
+                // 先手动隐藏建议列表，确保清除干净
+                if (currentState.showingSuggestions) {
+                  hideSuggestions();
+                }
+
+                // 清除整行并重新显示命令
+                process.stdout.write('\x1B[2K\x1B[0G');
+                process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + newInput + '\n');
+
+                cleanup();
+                resolve(newInput);
+                return;
+              } else {
+                // 文件类型，更新输入内容
+                if (currentState.showingSuggestions) {
+                  hideSuggestions();
+                }
+
+                // 清除当前输入并显示新输入
+                const promptLength = this.currentMessages.main.prompt.length;
+                process.stdout.write('\x1B[2K\x1B[0G');
+                process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + newInput);
+
+                currentInput = newInput;
+                await updateDisplay();
+                return;
+              }
             } else if (currentInput.trim()) {
               // 正常输入
               cleanup();
@@ -398,16 +520,15 @@ export class MainPage {
           // Backspace 键
           if (keyCode === 127 || keyCode === 8) {
             if (currentInput.length > 0) {
-              // 先隐藏命令列表（如果有的话）
-              if (showingCommands) {
-                hideCommandList();
-                showingCommands = false;
+              // 先隐藏建议列表（如果有的话）
+              if (currentState?.showingSuggestions) {
+                hideSuggestions();
               }
-              
+
               // 获取最后一个字符
               const lastChar = currentInput.slice(-1);
               currentInput = currentInput.slice(0, -1);
-              
+
               // 判断是否为多字节字符（如中文）
               if (lastChar.charCodeAt(0) > 127) {
                 // 中文字符，需要回退更多位置
@@ -416,9 +537,9 @@ export class MainPage {
                 // ASCII字符
                 process.stdout.write('\b \b');
               }
-              
+
               // 重新更新显示
-              updateDisplay();
+              await updateDisplay();
             }
             return;
           }
@@ -426,28 +547,34 @@ export class MainPage {
           // 上下箭头键处理
           if (key.length >= 3 && key.startsWith('\x1B[')) {
             if (key === '\x1B[A') { // 上箭头
-              if (showingCommands && filteredCommands.length > 0) {
-                hideCommandList();
-                selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : filteredCommands.length - 1;
-                showCommandList(filteredCommands);
+              if (currentState?.showingSuggestions && currentState.suggestions.length > 0) {
+                hideSuggestions();
+                const newIndex = currentState.selectedIndex > 0
+                  ? currentState.selectedIndex - 1
+                  : currentState.suggestions.length - 1;
+                currentState.selectedIndex = newIndex;
+                showSuggestions(currentState);
               }
               return;
             } else if (key === '\x1B[B') { // 下箭头
-              if (showingCommands && filteredCommands.length > 0) {
-                hideCommandList();
-                selectedIndex = selectedIndex < filteredCommands.length - 1 ? selectedIndex + 1 : 0;
-                showCommandList(filteredCommands);
+              if (currentState?.showingSuggestions && currentState.suggestions.length > 0) {
+                hideSuggestions();
+                const newIndex = currentState.selectedIndex < currentState.suggestions.length - 1
+                  ? currentState.selectedIndex + 1
+                  : 0;
+                currentState.selectedIndex = newIndex;
+                showSuggestions(currentState);
               }
               return;
             }
           }
 
-          // ESC 键 - 隐藏指令列表
+          // ESC 键 - 隐藏建议列表
           if (keyCode === 27 && key.length === 1) {
-            if (showingCommands) {
-              hideCommandList();
-              showingCommands = false;
-              filteredCommands = [];
+            if (currentState?.showingSuggestions) {
+              hideSuggestions();
+              currentState.showingSuggestions = false;
+              currentState.suggestions = [];
             }
             return;
           }
@@ -457,14 +584,14 @@ export class MainPage {
             // 支持所有可打印字符，包括中文
             currentInput += key;
             process.stdout.write(key);
-            updateDisplay();
+            await updateDisplay();
           } else if (key.length > 1) {
             // 处理多字节字符（如中文）
             // 过滤掉控制序列（以\x1B开头的）
             if (!key.startsWith('\x1B')) {
               currentInput += key;
               process.stdout.write(key);
-              updateDisplay();
+              await updateDisplay();
             }
           }
         } catch (error) {
@@ -498,7 +625,7 @@ export class MainPage {
         }
         process.stdin.resume();
         process.stdin.setEncoding('utf8');
-        
+
         // 添加事件监听器
         process.stdin.on('data', onKeyPress);
         process.stdin.on('error', onError);
@@ -506,7 +633,7 @@ export class MainPage {
         // 添加进程退出监听，确保清理
         process.on('SIGINT', handleExit);
         process.on('SIGTERM', handleExit);
-        
+
       } catch (error) {
         cleanup();
         reject(error);
@@ -526,54 +653,176 @@ export class MainPage {
 
   private showHistory(): void {
     const main = this.currentMessages.main;
-    
+
     if (this.messages.length === 0) {
       process.stdout.write(chalk.yellow(main.messages.noHistory + '\n'));
       return;
     }
 
     process.stdout.write(chalk.bold('\n=== ' + main.messages.historyTitle + ' ===\n\n'));
-    
+
     this.messages.forEach((message, index) => {
-      const timeStr = message.timestamp.toLocaleTimeString('zh-CN', { 
-        hour: '2-digit', 
+      const timeStr = message.timestamp.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
       });
-      
+
       const userLabel = main.messages.user;
       const aiLabel = main.messages.ai;
-      
-      const prefix = message.type === 'user' 
-        ? chalk.blue(`[${index + 1}] ${userLabel} [${timeStr}]: `)
-        : chalk.green(`[${index + 1}] ${aiLabel} [${timeStr}]: `);
-      
-      process.stdout.write(prefix + chalk.white(message.content) + '\n');
+
+      if (message.type === 'user') {
+        const prefix = chalk.blue(`[${index + 1}] ${userLabel} [${timeStr}]: `);
+        const displayContent = chalk.white(message.content);
+        process.stdout.write(prefix + displayContent + '\n');
+      } else {
+        // AI 消息使用 Markdown 渲染
+        const prefix = chalk.green(`[${index + 1}] ${aiLabel} [${timeStr}]:\n`);
+        process.stdout.write(prefix);
+        
+        try {
+          const renderedContent = renderMarkdown(message.content);
+          process.stdout.write(renderedContent);
+        } catch (error) {
+          // 渲染失败时显示原始内容
+          process.stdout.write(chalk.white(message.content));
+        }
+        process.stdout.write('\n');
+      }
     });
-    
+
     const totalMsg = main.messages.totalMessages.replace('{count}', this.messages.length.toString());
     process.stdout.write(chalk.gray(`\n${totalMsg}\n\n`));
   }
 
-  private async simulateAIProcessing(): Promise<void> {
+
+
+  private async processAIRequest(): Promise<void> {
+    // 检查API配置
+    const validation = StorageService.validateApiConfig();
+    if (!validation.isValid) {
+      const errorMsg = this.currentMessages.main.status.configMissing;
+      process.stdout.write(chalk.red(errorMsg) + '\n');
+      process.stdout.write(chalk.yellow('缺少配置项: ' + validation.missing.join(', ')) + '\n');
+      process.stdout.write(chalk.cyan('请使用 /config 命令进行配置\n\n'));
+      return;
+    }
+
     // 设置处理状态
     this.setChatState({ isProcessing: true, canSendMessage: false });
-    
+
     // 显示loading动画
     this.loadingController = AnimationUtils.showLoadingAnimation({
       text: this.currentMessages.main.status.thinking
     });
+
+    try {
+      // 构建聊天消息历史，包含选中的文件信息
+      const chatMessages = this.buildChatMessages();
+      
+      let aiResponseContent = '';
+      
+      // 流式调用OpenAI
+      await openAIService.streamChat({
+        messages: chatMessages,
+        onChunk: (chunk: string) => {
+          // 如果是第一个chunk，停止loading动画
+          if (aiResponseContent === '' && this.loadingController) {
+            this.loadingController.stop();
+            this.loadingController = null;
+          }
+          // 累积内容，但不立即显示（等待完整响应后渲染 Markdown）
+          aiResponseContent += chunk;
+        },
+        onComplete: (fullResponse: string) => {
+          // 停止loading动画（如果还在运行）
+          if (this.loadingController) {
+            this.loadingController.stop();
+            this.loadingController = null;
+          }
+          
+          // 渲染完整的 Markdown 回复
+          this.displayAIResponse(fullResponse);
+          
+          // 将完整回复添加到历史记录
+          const aiMessage: Message = {
+            type: 'ai',
+            content: fullResponse,
+            timestamp: new Date()
+          };
+          this.messages.push(aiMessage);
+          
+          // 恢复状态
+          this.setChatState({ isProcessing: false, canSendMessage: true });
+        },
+        onError: (error: Error) => {
+          // 停止loading动画
+          if (this.loadingController) {
+            this.loadingController.stop();
+            this.loadingController = null;
+          }
+          
+          // 显示错误信息
+          const errorMsg = `${this.currentMessages.main.status.connectionError}: ${error.message}`;
+          process.stdout.write(chalk.red(errorMsg) + '\n\n');
+          
+          // 恢复状态
+          this.setChatState({ isProcessing: false, canSendMessage: true });
+        }
+      });
+      
+    } catch (error) {
+      // 停止loading动画
+      if (this.loadingController) {
+        this.loadingController.stop();
+        this.loadingController = null;
+      }
+      
+      // 显示错误信息
+      const errorMsg = error instanceof Error ? error.message : '未知错误';
+      process.stdout.write(chalk.red(`${this.currentMessages.main.status.connectionError}: ${errorMsg}`) + '\n\n');
+      
+      // 恢复状态
+      this.setChatState({ isProcessing: false, canSendMessage: true });
+    }
+  }
+
+  /**
+   * 构建包含历史记录和文件信息的聊天消息
+   */
+  private buildChatMessages(): ChatMessage[] {
+    const messages: ChatMessage[] = [];
     
-    // 模拟处理时间
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // 添加系统消息
+    const selectedFiles = this.getSelectedFiles();
+    let systemMessage = '你是一个有用的AI助手。';
     
-    // 生成模拟回复
-    const randomResponse = this.responseManager.getRandomResponse();
+    if (selectedFiles.length > 0) {
+      systemMessage += `\n\n用户选中了以下文件（通过@语法引用）：\n${selectedFiles.map(file => `- ${file}`).join('\n')}\n\n请注意这些文件引用，你可以基于这些文件路径来回答用户的问题。用户可能会询问关于这些文件的问题。`;
+    }
     
-    // 注入AI回复（会自动停止loading动画）
-    this.injectAIReply(randomResponse);
+    messages.push({
+      role: 'system',
+      content: systemMessage
+    });
     
-    // 恢复状态
-    this.setChatState({ isProcessing: false, canSendMessage: true });
+    // 添加历史消息（保留最近的20条消息以控制token数量）
+    const recentMessages = this.messages.slice(-20);
+    
+    for (const message of recentMessages) {
+      messages.push({
+        role: message.type === 'user' ? 'user' : 'assistant',
+        content: message.content
+      });
+    }
+    
+    return messages;
+  }
+
+  /**
+   * 处理 /init 命令
+   */
+  private async handleInitCommand(): Promise<void> {
+    await this.initHandler.execute();
   }
 } 

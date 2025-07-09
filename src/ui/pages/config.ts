@@ -4,7 +4,7 @@ import { input } from '@inquirer/prompts';
 import { languageService } from '../../services/language';
 import { StorageService, ApiConfig } from '../../services/storage';
 import { InteractiveMenu, MenuChoice } from '../components/menu';
-import { AnimationUtils } from '../../utils/animation';
+import { AnimationUtils, StringUtils } from '../../utils';
 
 export class ConfigPage {
   private readonly gradients = AnimationUtils.getGradients();
@@ -58,6 +58,16 @@ export class ConfigPage {
         description: messages.config.menuDescription.model
       },
       {
+        name: messages.config.menuOptions.contextTokens,
+        value: 'contextTokens',
+        description: messages.config.menuDescription.contextTokens
+      },
+      {
+        name: messages.config.menuOptions.maxConcurrency,
+        value: 'maxConcurrency',
+        description: messages.config.menuDescription.maxConcurrency
+      },
+      {
         name: messages.config.menuOptions.viewConfig,
         value: 'viewConfig',
         description: messages.config.menuDescription.viewConfig
@@ -97,6 +107,14 @@ export class ConfigPage {
 
       case 'model':
         await this.editModel();
+        break;
+
+      case 'contextTokens':
+        await this.editContextTokens();
+        break;
+
+      case 'maxConcurrency':
+        await this.editMaxConcurrency();
         break;
 
       case 'viewConfig':
@@ -177,7 +195,7 @@ export class ConfigPage {
     console.log('  ' + chalk.gray(messages.config.menuDescription.apiKey));
 
     if (currentConfig.apiKey) {
-      const maskedKey = this.maskApiKey(currentConfig.apiKey);
+      const maskedKey = StringUtils.maskApiKey(currentConfig.apiKey);
       console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${maskedKey}`));
     }
     console.log();
@@ -253,6 +271,100 @@ export class ConfigPage {
     }
   }
 
+  private async editContextTokens(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getApiConfig();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.contextTokens));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.contextTokens));
+
+    if (currentConfig.contextTokens) {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${currentConfig.contextTokens}`));
+    }
+    console.log();
+
+    try {
+      const contextTokens = await input({
+        message: '  ' + messages.config.prompts.contextTokensInput + ':',
+        default: currentConfig.contextTokens?.toString() || messages.config.prompts.contextTokensPlaceholder,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return messages.config.messages.invalidInput;
+          }
+
+          const num = parseInt(input.trim());
+          if (isNaN(num) || num <= 0) {
+            return 'Please enter a valid positive number';
+          }
+          
+          if (num < 1000 || num > 2000000) {
+            return 'Context tokens should be between 1,000 and 2,000,000';
+          }
+
+          return true;
+        }
+      });
+
+      if (contextTokens && contextTokens.trim()) {
+        const tokenCount = parseInt(contextTokens.trim());
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveContextTokens(tokenCount);
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，直接返回
+      console.log();
+      return;
+    }
+  }
+
+  private async editMaxConcurrency(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getApiConfig();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.maxConcurrency));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.maxConcurrency));
+
+    if (currentConfig.maxConcurrency) {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${currentConfig.maxConcurrency}`));
+    }
+    console.log();
+
+    try {
+      const maxConcurrency = await input({
+        message: '  ' + messages.config.prompts.maxConcurrencyInput + ':',
+        default: currentConfig.maxConcurrency?.toString() || messages.config.prompts.maxConcurrencyPlaceholder,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return messages.config.messages.invalidInput;
+          }
+
+          const num = parseInt(input.trim());
+          if (isNaN(num) || num <= 0) {
+            return 'Please enter a valid positive number';
+          }
+          
+          if (num < 1 || num > 100) {
+            return 'Max concurrency should be between 1 and 100';
+          }
+
+          return true;
+        }
+      });
+
+      if (maxConcurrency && maxConcurrency.trim()) {
+        const concurrencyCount = parseInt(maxConcurrency.trim());
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveMaxConcurrency(concurrencyCount);
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，直接返回
+      console.log();
+      return;
+    }
+  }
+
   private async viewCurrentConfig(): Promise<void> {
     const messages = languageService.getMessages();
 
@@ -278,7 +390,7 @@ export class ConfigPage {
 
     this.displayConfigItem(
       messages.config.labels.apiKey,
-      config.apiKey ? this.maskApiKey(config.apiKey) : undefined,
+      config.apiKey ? StringUtils.maskApiKey(config.apiKey) : undefined,
       config.apiKey ? messages.config.labels.configured : messages.config.labels.notConfigured
     );
 
@@ -286,6 +398,18 @@ export class ConfigPage {
       messages.config.labels.model,
       config.model,
       config.model ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
+    this.displayConfigItem(
+      messages.config.labels.contextTokens,
+      config.contextTokens?.toString(),
+      config.contextTokens ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
+    this.displayConfigItem(
+      messages.config.labels.maxConcurrency,
+      config.maxConcurrency?.toString(),
+      config.maxConcurrency ? messages.config.labels.configured : messages.config.labels.notConfigured
     );
 
     console.log();
@@ -335,15 +459,5 @@ export class ConfigPage {
     }
   }
 
-  private maskApiKey(apiKey: string): string {
-    if (apiKey.length <= 10) {
-      return '*'.repeat(apiKey.length);
-    }
 
-    const start = apiKey.substring(0, 4);
-    const end = apiKey.substring(apiKey.length - 4);
-    const middle = '*'.repeat(apiKey.length - 8);
-
-    return start + middle + end;
-  }
 } 

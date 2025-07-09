@@ -7,6 +7,8 @@ export interface ApiConfig {
   baseUrl?: string;
   apiKey?: string;
   model?: string;
+  contextTokens?: number;
+  maxConcurrency?: number;
 }
 
 /**
@@ -78,7 +80,9 @@ export class StorageService {
     return {
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
-      model: config.model
+      model: config.model,
+      contextTokens: config.contextTokens || 128000,
+      maxConcurrency: config.maxConcurrency || 5
     };
   }
 
@@ -110,6 +114,24 @@ export class StorageService {
   }
 
   /**
+   * 保存上下文Token数量
+   */
+  static saveContextTokens(contextTokens: number): void {
+    const config = StorageService.readConfig();
+    config.contextTokens = contextTokens;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 保存最大并发数
+   */
+  static saveMaxConcurrency(maxConcurrency: number): void {
+    const config = StorageService.readConfig();
+    config.maxConcurrency = maxConcurrency;
+    StorageService.writeConfig(config);
+  }
+
+  /**
    * 批量保存API配置
    */
   static saveApiConfig(apiConfig: ApiConfig): void {
@@ -117,6 +139,8 @@ export class StorageService {
     if (apiConfig.baseUrl !== undefined) config.baseUrl = apiConfig.baseUrl;
     if (apiConfig.apiKey !== undefined) config.apiKey = apiConfig.apiKey;
     if (apiConfig.model !== undefined) config.model = apiConfig.model;
+    if (apiConfig.contextTokens !== undefined) config.contextTokens = apiConfig.contextTokens;
+    if (apiConfig.maxConcurrency !== undefined) config.maxConcurrency = apiConfig.maxConcurrency;
     StorageService.writeConfig(config);
   }
 

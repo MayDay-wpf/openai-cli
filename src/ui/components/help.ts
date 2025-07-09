@@ -25,6 +25,9 @@ export class HelpManager {
       chalk.gray('• ' + smartInput.showMenu + '\n') +
       chalk.gray('• ' + smartInput.matchCommands + '\n') +
       chalk.gray('• ' + smartInput.directExecute + '\n') +
+      chalk.gray('• ' + smartInput.fileSearch + '\n') +
+      chalk.gray('• ' + smartInput.showFileSearch + '\n') +
+      chalk.gray('• ' + smartInput.matchFileSearch + '\n') +
       chalk.gray('• ' + smartInput.navigation);
 
     const helpBox = boxen(helpContent, {

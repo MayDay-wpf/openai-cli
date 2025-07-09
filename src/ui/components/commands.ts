@@ -42,6 +42,11 @@ export class CommandManager {
         value: '/history', 
         name: mainCommands.history.name, 
         description: mainCommands.history.description 
+      },
+      { 
+        value: '/init', 
+        name: mainCommands.init.name, 
+        description: mainCommands.init.description 
       }
     ];
   }
