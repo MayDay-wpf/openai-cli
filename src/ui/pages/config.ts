@@ -119,11 +119,9 @@ export class ConfigPage {
 
       case 'viewConfig':
         await this.viewCurrentConfig();
-        // 查看配置后暂停让用户查看
+        // 查看配置后暂停让用户查看，使用自定义的等待输入方法避免终端状态冲突
         console.log();
-        await input({
-          message: '  ' + chalk.gray('Press Enter to continue...')
-        });
+        await this.waitForEnter();
         break;
 
       case 'resetConfig':
@@ -431,6 +429,45 @@ export class ConfigPage {
     console.log('    ' + chalk.gray('Value: ') + valueDisplay);
     console.log('    ' + chalk.gray('Status: ') + statusColor(status));
     console.log();
+  }
+
+  /**
+   * 等待用户按Enter键，避免与InteractiveMenu的终端状态冲突
+   */
+  private async waitForEnter(): Promise<void> {
+    return new Promise((resolve) => {
+      console.log('  ' + chalk.gray('Press Enter to continue...'));
+      
+      // 确保stdin处于正确状态
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+
+      const cleanup = () => {
+        // 重要：不要在这里设置setRawMode(false)，让InteractiveMenu自己管理
+        process.stdin.removeListener('data', keyHandler);
+        process.stdin.pause();
+      };
+
+      const keyHandler = (key: string) => {
+        switch (key) {
+          case '\r': // 回车
+          case '\n':
+            cleanup();
+            resolve();
+            break;
+          case '\u0003': // Ctrl+C
+            cleanup();
+            process.exit();
+            break;
+          // 忽略其他按键，只响应Enter和Ctrl+C
+        }
+      };
+
+      process.stdin.on('data', keyHandler);
+    });
   }
 
   private async resetConfig(): Promise<void> {

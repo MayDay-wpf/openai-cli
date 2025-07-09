@@ -9,7 +9,10 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "start:no-warnings": "node --no-deprecation dist/index.js",
+    "dev": "cross-env NODE_OPTIONS=\"--no-deprecation\" ts-node src/index.ts",
+    "dev:original": "ts-node src/index.ts",
+    "dev:quiet": "cross-env NODE_NO_WARNINGS=1 ts-node src/index.ts",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "prepare": "npm run build"
@@ -59,6 +62,7 @@
   "devDependencies": {
     "@types/figlet": "^1.5.8",
     "@types/node": "^20.19.4",
+    "cross-env": "^7.0.3",
     "rimraf": "^5.0.5",
     "ts-node": "^10.9.1",
     "typescript": "^5.3.0"
