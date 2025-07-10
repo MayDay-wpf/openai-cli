@@ -128,6 +128,11 @@ export interface Messages {
         nearLimit: string;
         overLimit: string;
       };
+      toolCall: {
+        calling: string;
+        success: string;
+        failed: string;
+      };
     };
     help: {
       title: string;

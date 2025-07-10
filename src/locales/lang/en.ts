@@ -129,6 +129,11 @@ export const en: Messages = {
         tokenStats: '📊 Token usage: {used}/{max} ({percentage}%)',
         nearLimit: '⚠️  Token usage approaching limit',
         overLimit: '❌ Token limit exceeded'
+      },
+      toolCall: {
+        calling: 'Calling tool: {name}',
+        success: 'Tool call successful',
+        failed: 'Tool call failed: {error}'
       }
     },
     help: {

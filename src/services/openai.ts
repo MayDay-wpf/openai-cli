@@ -99,7 +99,7 @@ export class OpenAIService {
         messages: currentMessages,
         temperature,
         max_tokens: maxTokens,
-        stream: false, // 暂时使用非流式以便正确处理工具调用
+        stream: true, // 使用真正的流式输出
       };
 
       if (responseFormat === 'json_object') {
@@ -113,30 +113,78 @@ export class OpenAIService {
 
       let maxToolCalls = 5; // 最大工具调用次数，防止无限循环
       let toolCallCount = 0;
+      let hasToolCalls = false;
+      let pendingToolCalls: any[] = [];
+      let assistantMessage = '';
 
       while (toolCallCount < maxToolCalls) {
-        const response = await client.chat.completions.create(requestBody);
-        const choice = response.choices[0];
+        const completion = await client.chat.completions.create({
+          ...requestBody,
+          stream: true
+        }) as any; // 临时使用any来避免类型错误
 
-        if (!choice?.message) {
-          break;
+        hasToolCalls = false;
+        pendingToolCalls = [];
+        assistantMessage = '';
+
+        // 处理流式响应
+        for await (const chunk of completion) {
+          const delta = chunk.choices[0]?.delta;
+
+          if (!delta) continue;
+
+          // 处理普通内容
+          if (delta.content) {
+            assistantMessage += delta.content;
+            fullResponse += delta.content;
+            onChunk?.(delta.content);
+          }
+
+          // 处理工具调用
+          if (delta.tool_calls) {
+            hasToolCalls = true;
+
+            for (const toolCallDelta of delta.tool_calls) {
+              const index = toolCallDelta.index || 0;
+
+              // 确保工具调用数组有足够的元素
+              while (pendingToolCalls.length <= index) {
+                pendingToolCalls.push({
+                  id: '',
+                  type: 'function',
+                  function: { name: '', arguments: '' }
+                });
+              }
+
+              if (toolCallDelta.id) {
+                pendingToolCalls[index].id = toolCallDelta.id;
+              }
+
+              if (toolCallDelta.function) {
+                if (toolCallDelta.function.name) {
+                  pendingToolCalls[index].function.name += toolCallDelta.function.name;
+                }
+                if (toolCallDelta.function.arguments) {
+                  pendingToolCalls[index].function.arguments += toolCallDelta.function.arguments;
+                }
+              }
+            }
+          }
         }
 
-        const message = choice.message;
-
-        // 如果有工具调用
-        if (message.tool_calls && message.tool_calls.length > 0 && onToolCall) {
+        // 如果有工具调用，处理它们
+        if (hasToolCalls && pendingToolCalls.length > 0 && onToolCall) {
           toolCallCount++;
 
           // 添加助手消息到对话历史
           currentMessages.push({
             role: 'assistant',
-            content: message.content || '',
-            tool_calls: message.tool_calls
+            content: assistantMessage,
+            tool_calls: pendingToolCalls
           } as any);
 
           // 执行每个工具调用
-          for (const toolCall of message.tool_calls) {
+          for (const toolCall of pendingToolCalls) {
             if (toolCall.function && toolCall.function.name) {
               try {
                 const toolResult = await onToolCall(toolCall);
@@ -164,26 +212,15 @@ export class OpenAIService {
           // 更新请求消息，继续对话
           requestBody.messages = currentMessages;
 
+          // 重置fullResponse，因为工具调用后会有新的回复
+          fullResponse = '';
+
           // 继续循环，让AI基于工具结果生成回复
           continue;
         }
 
         // 没有工具调用，这是最终回复
-        const content = message.content || '';
-        fullResponse = content;
-
-        // 如果有内容，通过onChunk逐字符输出以模拟流式效果
-        if (content && onChunk) {
-          const words = content.split(' ');
-          for (let i = 0; i < words.length; i++) {
-            const word = words[i] + (i < words.length - 1 ? ' ' : '');
-            onChunk(word);
-            // 添加小延迟以模拟打字效果
-            await new Promise(resolve => setTimeout(resolve, 20));
-          }
-        }
-
-        break; // 结束循环
+        break;
       }
 
       if (toolCallCount >= maxToolCalls) {

@@ -318,8 +318,13 @@ ${fileList}`
         const globalIndex = i + batchIndex;
         onProgress?.(globalIndex + 1, totalFiles, file.relativePath);
 
+        // 计算文件行数
+        const lineCount = this.calculateLineCount(file.content!);
+
+        // 生成文件功能简述
         const summary = await this.generateFileSummary(file);
-        return `**${file.relativePath}**: ${summary}`;
+
+        return `**${file.relativePath}** (Line Count:${lineCount}): ${summary}`;
       });
 
       const batchResults = await Promise.all(batchPromises);
@@ -533,6 +538,19 @@ ${fileSummaries.join('\n\n')}
     } catch (error) {
       return 5; // 默认并发量
     }
+  }
+
+  /**
+   * 计算文件行数
+   */
+  private calculateLineCount(content: string): number {
+    if (!content || content.trim().length === 0) {
+      return 0;
+    }
+
+    // 使用换行符计算行数，处理不同操作系统的换行符
+    const lines = content.split(/\r?\n/);
+    return lines.length;
   }
 
   /**

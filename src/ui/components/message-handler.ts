@@ -388,6 +388,8 @@ export class MessageHandler {
                 messages: chatMessages,
                 tools: tools.length > 0 ? tools : undefined,
                 onToolCall: async (toolCall: any) => {
+                    // 在工具调用时停止loading动画
+                    this.callbacks.onLoadingStop();
                     return await this.handleToolCall(toolCall);
                 },
                 onChunk: (chunk: string) => {
@@ -482,22 +484,24 @@ export class MessageHandler {
      */
     private async handleToolCall(toolCall: any): Promise<any> {
         try {
+            const messages = languageService.getMessages();
             const functionName = toolCall.function.name;
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
-            console.log(chalk.cyan(`调用工具: ${functionName}`));
+            console.log(chalk.cyan(messages.main.messages.toolCall.calling.replace('{name}', functionName)));
             // console.log(chalk.gray(`参数: ${JSON.stringify(parameters, null, 2)}`));
 
             const systemDetector = this.callbacks.getSystemDetector();
             const result = await systemDetector.executeMcpTool(functionName, parameters);
 
-            console.log(chalk.green(`工具调用成功`));
+            console.log(chalk.green(messages.main.messages.toolCall.success));
             // console.log(chalk.gray(`结果: ${JSON.stringify(result, null, 2)}`));
 
             return result;
         } catch (error) {
+            const messages = languageService.getMessages();
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-            console.log(chalk.red(`工具调用失败: ${errorMsg}`));
+            console.log(chalk.red(messages.main.messages.toolCall.failed.replace('{error}', errorMsg)));
             throw error;
         }
     }

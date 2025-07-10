@@ -129,6 +129,11 @@ export const zh: Messages = {
         tokenStats: '📊 Token使用情况: {used}/{max} ({percentage}%)',
         nearLimit: '⚠️  Token使用接近限制',
         overLimit: '❌ Token超出限制'
+      },
+      toolCall: {
+        calling: '调用工具: {name}',
+        success: '工具调用成功',
+        failed: '工具调用失败: {error}'
       }
     },
     help: {
