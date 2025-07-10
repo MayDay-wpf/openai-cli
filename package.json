@@ -54,13 +54,14 @@
     "cli-highlight": "^2.1.11",
     "commander": "^11.1.0",
     "figlet": "^1.7.0",
-    "marked": "^15.0.12",
-    "marked-terminal": "^7.3.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^12.0.2",
     "openai": "^4.62.1",
     "tiktoken": "^1.0.21"
   },
   "devDependencies": {
     "@types/figlet": "^1.5.8",
+    "@types/marked": "^5.0.2",
     "@types/node": "^20.19.4",
     "cross-env": "^7.0.3",
     "rimraf": "^5.0.5",

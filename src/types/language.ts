@@ -82,6 +82,7 @@ export interface Messages {
       configMissing: string;
       connectionError: string;
       streamingResponse: string;
+      unknownError: string;
     };
     commands: {
       exit: { name: string; description: string };
@@ -98,6 +99,35 @@ export interface Messages {
       totalMessages: string;
       user: string;
       ai: string;
+      userLabel: string;
+      aiLabel: string;
+      codeBlock: {
+        lineLabel: string;
+        unknownLanguage: string;
+      };
+      markdown: {
+        codeInline: string;
+        linkText: string;
+        listItem: string;
+      };
+      streaming: {
+        receiving: string;
+        processing: string;
+        completed: string;
+      };
+      system: {
+        basePrompt: string;
+        fileReferencePrompt: string;
+      };
+      format: {
+        timeLocale: string;
+      };
+      tokenUsage: {
+        droppedMessages: string;
+        tokenStats: string;
+        nearLimit: string;
+        overLimit: string;
+      };
     };
     help: {
       title: string;

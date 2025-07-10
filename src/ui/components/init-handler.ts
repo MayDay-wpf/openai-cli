@@ -1,10 +1,10 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ProjectInitService, InitProgress } from '../../services/project-init';
+import { InitProgress, ProjectInitService } from '../../services/project-init';
 import { StorageService } from '../../services/storage';
-import { MultiPhaseProgress } from '../../utils/progress';
 import { Messages } from '../../types/language';
+import { MultiPhaseProgress } from '../../utils/progress';
 
 export interface InitState {
   isRunning: boolean;
@@ -61,7 +61,7 @@ export class InitHandler {
           process.stdout.write(chalk.cyan(`${this.messages.main.init.description}\n\n`));
           return;
         }
-        
+
         const shouldResume = await this.askResumeProgress();
         if (shouldResume) {
           await this.resumeInit(savedProgress);
@@ -152,30 +152,30 @@ export class InitHandler {
         outputPath,
         onPhaseChange: (phase: string) => {
           if (this.isInterrupted) throw new Error('Interrupted');
-          
+
           // 进入新阶段
           currentPhaseIndex++;
-          
+
           // 只有当真正进入新阶段时才调用nextPhase
           if (currentPhaseIndex > this.currentState!.currentPhase) {
             this.progressManager?.nextPhase();
           }
-          
+
           // 更新状态
           if (this.currentState) {
             this.currentState.currentPhase = currentPhaseIndex;
             this.currentState.currentPhaseWeight = phases[currentPhaseIndex]?.weight || 0;
             this.currentState.currentPhaseProgress = 0;
-            
+
             // 计算累积进度（之前阶段的总和）
             this.currentState.accumulatedProgress = phases
               .slice(0, currentPhaseIndex)
               .reduce((sum, p) => sum + p.weight, 0);
-            
+
             this.currentState.overallProgress = this.currentState.accumulatedProgress;
             this.saveProgress(this.currentState);
           }
-          
+
           // 如果不是恢复状态，显示当前阶段开始
           if (currentPhaseIndex === this.currentState!.currentPhase) {
             this.progressManager?.updatePhase(0);
@@ -183,26 +183,26 @@ export class InitHandler {
         },
         onProgress: (progress: InitProgress) => {
           if (this.isInterrupted) throw new Error('Interrupted');
-          
+
           if (currentPhaseIndex >= 0 && currentPhaseIndex < phases.length && this.currentState) {
             // 计算当前阶段内的进度
             const phaseProgressPercent = (progress.current / progress.total) * 100;
             const phaseProgress = (progress.current / progress.total) * this.currentState.currentPhaseWeight;
-            
+
             // 更新进度条显示
             this.progressManager?.updatePhase(phaseProgress, progress.file);
-            
+
             // 更新状态
             this.currentState.currentPhaseProgress = phaseProgressPercent;
             this.currentState.overallProgress = this.currentState.accumulatedProgress + phaseProgress;
-            
+
             // 如果是文件生成阶段且有文件路径，保存到已处理列表
             if (progress.file && progress.file.includes('.')) {
               if (!this.currentState.processedFiles.includes(progress.file)) {
                 this.currentState.processedFiles.push(progress.file);
               }
             }
-            
+
             // 保存进度到文件
             this.saveProgress(this.currentState);
           }
@@ -220,10 +220,10 @@ export class InitHandler {
 
       if (!this.isInterrupted) {
         this.progressManager?.complete(this.messages.main.init.completed);
-        
+
         process.stdout.write(chalk.green(`${this.messages.main.init.savedTo}: ${result}\n`));
         process.stdout.write(chalk.cyan(`${this.messages.main.init.description}\n\n`));
-        
+
         // 更新为完成状态而不是删除
         if (this.currentState) {
           this.currentState.currentPhase = phases.length; // 标记为完成
@@ -249,16 +249,15 @@ export class InitHandler {
    */
   private async resumeInit(savedState: InitState): Promise<void> {
     process.stdout.write(chalk.blue(`\n${this.messages.main.init.resuming}...\n`));
-    process.stdout.write(chalk.gray(`从第 ${savedState.currentPhase + 1} 阶段继续，已处理 ${savedState.processedFiles.length} 个文件\n`));
-    process.stdout.write(chalk.gray(`总体进度: ${savedState.overallProgress.toFixed(1)}%\n\n`));
-    
+    process.stdout.write(chalk.gray(`🕐:${savedState.overallProgress.toFixed(1)}%\n\n`));
+
     // 从保存的状态继续，但使用修改过的逻辑跳过已处理的文件
     this.currentState = {
       ...savedState,
       isRunning: true,
       startTime: Date.now() // 重置开始时间
     };
-    
+
     // 调用专门的恢复初始化方法
     await this.resumeInitWithProgress(savedState);
   }
@@ -273,7 +272,7 @@ export class InitHandler {
       isRunning: true,
       startTime: Date.now()
     };
-    
+
     // 从当前阶段继续，不要重复创建进度条
     await this.startNewInit(savedState.processedFiles, savedState.currentPhase);
   }
@@ -294,22 +293,22 @@ export class InitHandler {
   private setupInterruptHandler(): void {
     this.interruptHandler = () => {
       if (this.isInterrupted) return; // 避免重复处理
-      
+
       // 立即设置中断标志，这是最重要的
       this.isInterrupted = true;
-      
+
       // 立即停止进度条显示
       if (this.progressManager) {
         this.progressManager.clearLine(); // 清空当前行
       }
-      
+
       // 保存进度
       if (this.currentState) {
         this.currentState.isRunning = false;
         this.currentState.outputPath = this.currentState.outputPath || path.join(process.cwd(), 'sawyou.json');
         this.saveProgress(this.currentState);
       }
-      
+
       // 输出中断信息
       process.stdout.write(chalk.yellow(`\n${this.messages.main.init.interrupted}\n`));
       process.stdout.write(chalk.blue(`${this.messages.main.init.progressSaved}\n\n`));
@@ -371,7 +370,7 @@ export class InitHandler {
       process.removeListener('SIGTERM', this.interruptHandler);
       this.interruptHandler = null;
     }
-    
+
     this.isInterrupted = false;
     this.currentState = null;
     this.progressManager = null;

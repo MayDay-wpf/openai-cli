@@ -65,7 +65,8 @@ export const en: Messages = {
       thinking: 'thinking...',
       configMissing: 'API configuration incomplete, please configure API settings first',
       connectionError: 'Connection failed, please check network and API configuration',
-      streamingResponse: 'Receiving response...'
+      streamingResponse: 'Receiving response...',
+      unknownError: 'Unknown error'
     },
     commands: {
       exit: {
@@ -99,7 +100,36 @@ export const en: Messages = {
       historyTitle: 'Chat History',
       totalMessages: 'Total {count} messages',
       user: 'User',
-      ai: 'AI'
+      ai: 'AI',
+      userLabel: '👤 User',
+      aiLabel: '🤖 AI Assistant',
+      codeBlock: {
+        lineLabel: 'Line',
+        unknownLanguage: 'Unknown Language'
+      },
+      markdown: {
+        codeInline: 'Code',
+        linkText: 'Link',
+        listItem: 'Item'
+      },
+      streaming: {
+        receiving: 'Receiving response...',
+        processing: 'Processing...',
+        completed: 'Response completed'
+      },
+      system: {
+        basePrompt: 'You are a helpful AI assistant.',
+        fileReferencePrompt: '\n\nThe user has selected the following files (referenced via @ syntax):\n{fileList}\n\nPlease pay attention to these file references. You can answer user questions based on these file paths. Users may ask questions about these files.'
+      },
+      format: {
+        timeLocale: 'en-US'
+      },
+      tokenUsage: {
+        droppedMessages: '⚠️  Dropped {count} earlier messages to stay within token limit',
+        tokenStats: '📊 Token usage: {used}/{max} ({percentage}%)',
+        nearLimit: '⚠️  Token usage approaching limit',
+        overLimit: '❌ Token limit exceeded'
+      }
     },
     help: {
       title: 'Help',

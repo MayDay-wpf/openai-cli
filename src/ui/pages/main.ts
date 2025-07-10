@@ -1,24 +1,10 @@
-import chalk from 'chalk';
 import boxen from 'boxen';
-import { input } from '@inquirer/prompts';
-import { select } from '@inquirer/prompts';
-import { AnimationUtils, LoadingController, StringUtils, renderMarkdown } from '../../utils';
-import { CommandManager, HelpManager, ResponseManager, Command, FileSearchManager, FileSearchResult, InputHandler, InputState, InputSuggestion, InitHandler } from '../components';
+import chalk from 'chalk';
 import { languageService } from '../../services/language';
 import { StorageService } from '../../services/storage';
-import { openAIService, ChatMessage } from '../../services/openai';
 import { Messages } from '../../types/language';
-
-interface Message {
-  type: 'user' | 'ai';
-  content: string;
-  timestamp: Date;
-}
-
-export interface ChatState {
-  canSendMessage: boolean;
-  isProcessing: boolean;
-}
+import { LoadingController, StringUtils } from '../../utils';
+import { ChatState, CommandManager, FileSearchManager, HelpManager, InitHandler, InputHandler, InputState, Message, MessageHandler, MessageHandlerCallbacks, ResponseManager } from '../components';
 
 export class MainPage {
   private messages: Message[] = [];
@@ -36,6 +22,7 @@ export class MainPage {
   private fileSearchManager: FileSearchManager;
   private inputHandler: InputHandler;
   private initHandler: InitHandler;
+  private messageHandler: MessageHandler;
   private currentMessages: Messages;
 
   constructor() {
@@ -50,6 +37,33 @@ export class MainPage {
       this.currentMessages
     );
     this.initHandler = new InitHandler(this.currentMessages);
+
+    // 创建 MessageHandler 回调
+    const messageHandlerCallbacks: MessageHandlerCallbacks = {
+      onStateChange: (state: Partial<ChatState>) => {
+        this.setChatState(state);
+      },
+      onLoadingStart: (controller: LoadingController) => {
+        this.loadingController = controller;
+      },
+      onLoadingStop: () => {
+        if (this.loadingController) {
+          this.loadingController.stop();
+          this.loadingController = null;
+        }
+      },
+      getSelectedFiles: () => {
+        return this.getSelectedFiles();
+      },
+      addMessage: (message: Message) => {
+        this.messages.push(message);
+      },
+      getRecentMessages: (count: number = 20) => {
+        return this.messages.slice(-count);
+      }
+    };
+
+    this.messageHandler = new MessageHandler(this.currentMessages, messageHandlerCallbacks);
 
     // 监听语言变化
     languageService.onLanguageChange((language) => {
@@ -105,6 +119,7 @@ export class MainPage {
     this.responseManager.updateLanguage(this.currentMessages);
     this.inputHandler.updateLanguage(this.currentMessages);
     this.initHandler.updateLanguage(this.currentMessages);
+    this.messageHandler.updateLanguage(this.currentMessages);
   }
 
   // 公开API：注入AI回复
@@ -115,15 +130,7 @@ export class MainPage {
       this.loadingController = null;
     }
 
-    const aiMessage: Message = {
-      type: 'ai',
-      content,
-      timestamp: new Date()
-    };
-    this.messages.push(aiMessage);
-    
-    // 使用 Markdown 渲染显示 AI 回复
-    this.displayAIResponse(content);
+    this.messageHandler.injectAIReply(content);
   }
 
   // 公开API：设置聊天状态
@@ -253,7 +260,7 @@ export class MainPage {
         }
 
         if (userInput === '/history') {
-          this.showHistory();
+          this.messageHandler.showHistory(this.messages);
           continue;
         }
 
@@ -262,62 +269,17 @@ export class MainPage {
           continue;
         }
 
-
         // 添加用户消息并直接显示
-        this.addUserMessage(userInput);
+        this.messageHandler.addUserMessage(userInput);
 
         // 处理AI请求
-        await this.processAIRequest();
+        await this.messageHandler.processAIRequest();
       }
     } catch (error) {
       console.error('聊天循环出现错误:', error);
     } finally {
       // 确保在退出时清理所有资源
       this.destroy();
-    }
-  }
-
-  private displayMessage(message: Message): void {
-    const timeStr = message.timestamp.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    if (message.type === 'user') {
-      // 显示用户消息
-      const userLabel = this.currentMessages.main.messages.user;
-      process.stdout.write(chalk.blue(`${userLabel} [${timeStr}]: `) + chalk.white(message.content) + '\n');
-    } else if (message.type === 'ai') {
-      // 这个方法主要用于历史记录显示，AI回复使用 displayAIResponse
-      const aiLabel = this.currentMessages.main.messages.ai;
-      process.stdout.write(chalk.green(`${aiLabel} [${timeStr}]: `) + chalk.white(message.content) + '\n\n');
-    }
-  }
-
-  /**
-   * 显示 AI 回复，支持 Markdown 渲染
-   */
-  private displayAIResponse(content: string): void {
-    const timeStr = new Date().toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    
-    const aiLabel = this.currentMessages.main.messages.ai;
-    
-    try {
-      // 渲染 Markdown 内容
-      const renderedContent = renderMarkdown(content);
-      
-      // 显示AI标签和渲染后的内容
-      process.stdout.write(chalk.green(`${aiLabel} [${timeStr}]:\n\n`));
-      process.stdout.write(renderedContent);
-      process.stdout.write('\n');
-    } catch (error) {
-      // 如果渲染失败，显示原始内容
-      console.error('Markdown 渲染失败:', error);
-      process.stdout.write(chalk.green(`${aiLabel} [${timeStr}]: `));
-      process.stdout.write(chalk.white(content) + '\n\n');
     }
   }
 
@@ -639,184 +601,6 @@ export class MainPage {
         reject(error);
       }
     });
-  }
-
-  private addUserMessage(content: string): void {
-    const userMessage: Message = {
-      type: 'user',
-      content,
-      timestamp: new Date()
-    };
-    this.messages.push(userMessage);
-    this.displayMessage(userMessage);
-  }
-
-  private showHistory(): void {
-    const main = this.currentMessages.main;
-
-    if (this.messages.length === 0) {
-      process.stdout.write(chalk.yellow(main.messages.noHistory + '\n'));
-      return;
-    }
-
-    process.stdout.write(chalk.bold('\n=== ' + main.messages.historyTitle + ' ===\n\n'));
-
-    this.messages.forEach((message, index) => {
-      const timeStr = message.timestamp.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-
-      const userLabel = main.messages.user;
-      const aiLabel = main.messages.ai;
-
-      if (message.type === 'user') {
-        const prefix = chalk.blue(`[${index + 1}] ${userLabel} [${timeStr}]: `);
-        const displayContent = chalk.white(message.content);
-        process.stdout.write(prefix + displayContent + '\n');
-      } else {
-        // AI 消息使用 Markdown 渲染
-        const prefix = chalk.green(`[${index + 1}] ${aiLabel} [${timeStr}]:\n`);
-        process.stdout.write(prefix);
-        
-        try {
-          const renderedContent = renderMarkdown(message.content);
-          process.stdout.write(renderedContent);
-        } catch (error) {
-          // 渲染失败时显示原始内容
-          process.stdout.write(chalk.white(message.content));
-        }
-        process.stdout.write('\n');
-      }
-    });
-
-    const totalMsg = main.messages.totalMessages.replace('{count}', this.messages.length.toString());
-    process.stdout.write(chalk.gray(`\n${totalMsg}\n\n`));
-  }
-
-
-
-  private async processAIRequest(): Promise<void> {
-    // 检查API配置
-    const validation = StorageService.validateApiConfig();
-    if (!validation.isValid) {
-      const errorMsg = this.currentMessages.main.status.configMissing;
-      process.stdout.write(chalk.red(errorMsg) + '\n');
-      process.stdout.write(chalk.yellow('缺少配置项: ' + validation.missing.join(', ')) + '\n');
-      process.stdout.write(chalk.cyan('请使用 /config 命令进行配置\n\n'));
-      return;
-    }
-
-    // 设置处理状态
-    this.setChatState({ isProcessing: true, canSendMessage: false });
-
-    // 显示loading动画
-    this.loadingController = AnimationUtils.showLoadingAnimation({
-      text: this.currentMessages.main.status.thinking
-    });
-
-    try {
-      // 构建聊天消息历史，包含选中的文件信息
-      const chatMessages = this.buildChatMessages();
-      
-      let aiResponseContent = '';
-      
-      // 流式调用OpenAI
-      await openAIService.streamChat({
-        messages: chatMessages,
-        onChunk: (chunk: string) => {
-          // 如果是第一个chunk，停止loading动画
-          if (aiResponseContent === '' && this.loadingController) {
-            this.loadingController.stop();
-            this.loadingController = null;
-          }
-          // 累积内容，但不立即显示（等待完整响应后渲染 Markdown）
-          aiResponseContent += chunk;
-        },
-        onComplete: (fullResponse: string) => {
-          // 停止loading动画（如果还在运行）
-          if (this.loadingController) {
-            this.loadingController.stop();
-            this.loadingController = null;
-          }
-          
-          // 渲染完整的 Markdown 回复
-          this.displayAIResponse(fullResponse);
-          
-          // 将完整回复添加到历史记录
-          const aiMessage: Message = {
-            type: 'ai',
-            content: fullResponse,
-            timestamp: new Date()
-          };
-          this.messages.push(aiMessage);
-          
-          // 恢复状态
-          this.setChatState({ isProcessing: false, canSendMessage: true });
-        },
-        onError: (error: Error) => {
-          // 停止loading动画
-          if (this.loadingController) {
-            this.loadingController.stop();
-            this.loadingController = null;
-          }
-          
-          // 显示错误信息
-          const errorMsg = `${this.currentMessages.main.status.connectionError}: ${error.message}`;
-          process.stdout.write(chalk.red(errorMsg) + '\n\n');
-          
-          // 恢复状态
-          this.setChatState({ isProcessing: false, canSendMessage: true });
-        }
-      });
-      
-    } catch (error) {
-      // 停止loading动画
-      if (this.loadingController) {
-        this.loadingController.stop();
-        this.loadingController = null;
-      }
-      
-      // 显示错误信息
-      const errorMsg = error instanceof Error ? error.message : '未知错误';
-      process.stdout.write(chalk.red(`${this.currentMessages.main.status.connectionError}: ${errorMsg}`) + '\n\n');
-      
-      // 恢复状态
-      this.setChatState({ isProcessing: false, canSendMessage: true });
-    }
-  }
-
-  /**
-   * 构建包含历史记录和文件信息的聊天消息
-   */
-  private buildChatMessages(): ChatMessage[] {
-    const messages: ChatMessage[] = [];
-    
-    // 添加系统消息
-    const selectedFiles = this.getSelectedFiles();
-    let systemMessage = '你是一个有用的AI助手。';
-    
-    if (selectedFiles.length > 0) {
-      systemMessage += `\n\n用户选中了以下文件（通过@语法引用）：\n${selectedFiles.map(file => `- ${file}`).join('\n')}\n\n请注意这些文件引用，你可以基于这些文件路径来回答用户的问题。用户可能会询问关于这些文件的问题。`;
-    }
-    
-    messages.push({
-      role: 'system',
-      content: systemMessage
-    });
-    
-    // 添加历史消息（保留最近的20条消息以控制token数量）
-    const recentMessages = this.messages.slice(-20);
-    
-    for (const message of recentMessages) {
-      messages.push({
-        role: message.type === 'user' ? 'user' : 'assistant',
-        content: message.content
-      });
-    }
-    
-    return messages;
   }
 
   /**

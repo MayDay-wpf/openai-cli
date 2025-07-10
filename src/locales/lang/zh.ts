@@ -65,7 +65,8 @@ export const zh: Messages = {
       thinking: '思考中...',
       configMissing: 'API配置不完整，请先配置API信息',
       connectionError: '连接失败，请检查网络和API配置',
-      streamingResponse: '正在接收回复...'
+      streamingResponse: '正在接收回复...',
+      unknownError: '未知错误'
     },
     commands: {
       exit: {
@@ -99,7 +100,36 @@ export const zh: Messages = {
       historyTitle: '聊天历史',
       totalMessages: '总共 {count} 条消息',
       user: '用户',
-      ai: 'AI'
+      ai: 'AI',
+      userLabel: '👤 用户',
+      aiLabel: '🤖 AI助手',
+      codeBlock: {
+        lineLabel: '行',
+        unknownLanguage: '未知语言'
+      },
+      markdown: {
+        codeInline: '代码',
+        linkText: '链接',
+        listItem: '项目'
+      },
+      streaming: {
+        receiving: '正在接收回复...',
+        processing: '处理中...',
+        completed: '回复完成'
+      },
+      system: {
+        basePrompt: '你是一个有用的AI助手。',
+        fileReferencePrompt: '\n\n用户选中了以下文件（通过@语法引用）：\n{fileList}\n\n请注意这些文件引用，你可以基于这些文件路径来回答用户的问题。用户可能会询问关于这些文件的问题。'
+      },
+      format: {
+        timeLocale: 'zh-CN'
+      },
+      tokenUsage: {
+        droppedMessages: '⚠️  为保持在Token限制内，已丢弃 {count} 条较早的消息',
+        tokenStats: '📊 Token使用情况: {used}/{max} ({percentage}%)',
+        nearLimit: '⚠️  Token使用接近限制',
+        overLimit: '❌ Token超出限制'
+      }
     },
     help: {
       title: '帮助',
