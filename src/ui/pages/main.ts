@@ -2,6 +2,7 @@ import boxen from 'boxen';
 import chalk from 'chalk';
 import { languageService } from '../../services/language';
 import { StorageService } from '../../services/storage';
+import { SystemDetector } from '../../services/system-detector';
 import { Messages } from '../../types/language';
 import { LoadingController, StringUtils } from '../../utils';
 import { ChatState, CommandManager, FileSearchManager, HelpManager, InitHandler, InputHandler, InputState, Message, MessageHandler, MessageHandlerCallbacks, ResponseManager } from '../components';
@@ -24,6 +25,7 @@ export class MainPage {
   private initHandler: InitHandler;
   private messageHandler: MessageHandler;
   private currentMessages: Messages;
+  private systemDetector: SystemDetector;
 
   constructor() {
     this.currentMessages = languageService.getMessages();
@@ -37,6 +39,7 @@ export class MainPage {
       this.currentMessages
     );
     this.initHandler = new InitHandler(this.currentMessages);
+    this.systemDetector = new SystemDetector();
 
     // 创建 MessageHandler 回调
     const messageHandlerCallbacks: MessageHandlerCallbacks = {
@@ -60,6 +63,9 @@ export class MainPage {
       },
       getRecentMessages: (count: number = 20) => {
         return this.messages.slice(-count);
+      },
+      getSystemDetector: () => {
+        return this.systemDetector;
       }
     };
 
@@ -81,6 +87,11 @@ export class MainPage {
       this.loadingController.stop();
       this.loadingController = null;
     }
+
+    // 清理SystemDetector资源
+    this.systemDetector.cleanup().catch(error => {
+      // 忽略清理错误
+    });
 
     // 重置聊天状态
     this.setChatState({ canSendMessage: false, isProcessing: false });
@@ -213,8 +224,29 @@ export class MainPage {
 
     process.stdout.write(welcomeBox + '\n\n');
 
+    // 在显示输入之前先进行系统检测
+    await this.performSystemDetection();
+
     // 开始聊天循环
     await this.startChatLoop();
+  }
+
+  private async performSystemDetection(): Promise<void> {
+    try {
+      // 检测系统状态
+      const detectionResult = await this.systemDetector.detectSystem();
+
+      // 显示系统信息
+      await this.systemDetector.displaySystemInfo(detectionResult);
+
+      // 添加空行分隔，直接进入输入状态
+      if (detectionResult.hasRole || detectionResult.hasMcpServices) {
+        console.log(); // 添加空行分隔
+      }
+    } catch (error) {
+      console.error('系统检测失败:', error);
+      // 检测失败不影响后续流程，继续进入聊天
+    }
   }
 
   private async startChatLoop(): Promise<void> {
@@ -323,9 +355,10 @@ export class MainPage {
         const linesToGoUp = renderedSuggestions.length + (title ? 2 : 1);
         process.stdout.write(`\x1B[${linesToGoUp}A`);
 
-        // 重新计算光标位置：提示符长度 + 当前输入长度
-        const promptLength = this.currentMessages.main.prompt.length;
-        process.stdout.write(`\x1B[${promptLength + currentInput.length + 1}G`);
+        // 重新计算光标位置：提示符长度 + 当前输入显示宽度
+        const promptLength = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
+        const inputWidth = StringUtils.getDisplayWidth(currentInput);
+        process.stdout.write(`\x1B[${promptLength + inputWidth + 1}G`);
       };
 
       // 隐藏建议列表
@@ -379,6 +412,15 @@ export class MainPage {
         if (newState.showingSuggestions) {
           showSuggestions(newState);
         }
+      };
+
+      // 强制刷新输入行显示
+      const refreshInputLine = () => {
+        if (isDestroyed) return;
+
+        // 清除当前行并重新显示
+        process.stdout.write('\x1B[2K\x1B[0G');
+        process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + currentInput);
       };
 
       // 清理函数
@@ -458,12 +500,13 @@ export class MainPage {
                   hideSuggestions();
                 }
 
-                // 清除当前输入并显示新输入
-                const promptLength = this.currentMessages.main.prompt.length;
-                process.stdout.write('\x1B[2K\x1B[0G');
-                process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + newInput);
-
+                // 更新输入内容
                 currentInput = newInput;
+
+                // 刷新输入行显示
+                refreshInputLine();
+
+                // 更新显示
                 await updateDisplay();
                 return;
               }
@@ -487,16 +530,17 @@ export class MainPage {
                 hideSuggestions();
               }
 
-              // 获取最后一个字符
+              // 获取最后一个字符及其显示宽度
               const lastChar = currentInput.slice(-1);
+              const lastCharWidth = StringUtils.getDisplayWidth(lastChar);
               currentInput = currentInput.slice(0, -1);
 
-              // 判断是否为多字节字符（如中文）
-              if (lastChar.charCodeAt(0) > 127) {
-                // 中文字符，需要回退更多位置
+              // 根据字符的实际显示宽度回退光标
+              if (lastCharWidth === 2) {
+                // 宽字符（如中文），占用2个字符宽度
                 process.stdout.write('\b\b  \b\b');
               } else {
-                // ASCII字符
+                // 窄字符（如ASCII），占用1个字符宽度
                 process.stdout.write('\b \b');
               }
 
@@ -548,12 +592,34 @@ export class MainPage {
             process.stdout.write(key);
             await updateDisplay();
           } else if (key.length > 1) {
-            // 处理多字节字符（如中文）
+            // 处理多字节字符或粘贴内容
             // 过滤掉控制序列（以\x1B开头的）
             if (!key.startsWith('\x1B')) {
-              currentInput += key;
-              process.stdout.write(key);
-              await updateDisplay();
+              // 检查是否为粘贴的长文本（包含换行符或长度较大）
+              if (key.includes('\n') || key.includes('\r') || key.length > 10) {
+                // 处理粘贴内容
+                const processedText = StringUtils.processPastedText(key);
+                if (processedText) {
+                  // 先隐藏建议列表（如果有的话）
+                  if (currentState?.showingSuggestions) {
+                    hideSuggestions();
+                  }
+
+                  // 添加处理后的文本到输入
+                  currentInput += processedText;
+
+                  // 刷新输入行显示
+                  refreshInputLine();
+
+                  // 更新显示
+                  await updateDisplay();
+                }
+              } else {
+                // 正常的多字节字符（如中文字符）
+                currentInput += key;
+                process.stdout.write(key);
+                await updateDisplay();
+              }
             }
           }
         } catch (error) {

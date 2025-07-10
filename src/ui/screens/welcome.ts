@@ -160,7 +160,9 @@ export class WelcomeScreen {
               // 用户选择配置，跳转到配置页面
               const configPage = new ConfigPage();
               await configPage.show();
-              // 配置完成后重新显示欢迎页面
+              // 配置完成后确保终端状态重置
+              await this.ensureTerminalReset();
+              // 重新显示欢迎页面
               await this.show();
             } else {
               // 用户选择返回主菜单，清屏并重新显示整个欢迎页面
@@ -186,7 +188,9 @@ export class WelcomeScreen {
       case 'config':
         const configPage = new ConfigPage();
         await configPage.show();
-        // 配置页面完成后，重新显示完整的欢迎页
+        // 配置页面完成后，确保终端状态完全重置
+        await this.ensureTerminalReset();
+        // 重新显示完整的欢迎页
         await this.show();
         return;
 
@@ -308,5 +312,22 @@ export class WelcomeScreen {
     });
 
     return choice === 'config';
+  }
+
+  /**
+   * 确保终端状态完全重置，防止外部编辑器等工具影响后续交互
+   */
+  private async ensureTerminalReset(): Promise<void> {
+    // 恢复光标显示
+    process.stdout.write('\x1B[?25h');
+
+    // 确保stdin处于正确状态
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      // 短暂延迟确保状态重置完成
+      await new Promise(resolve => setTimeout(resolve, 100));
+      process.stdin.resume();
+    }
   }
 } 

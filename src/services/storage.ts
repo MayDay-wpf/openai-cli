@@ -1,6 +1,6 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 import { Language } from '../types/language';
 
 export interface ApiConfig {
@@ -9,6 +9,16 @@ export interface ApiConfig {
   model?: string;
   contextTokens?: number;
   maxConcurrency?: number;
+  role?: string;
+}
+
+export interface McpServer {
+  url: string;
+  [key: string]: any; // 允许额外的配置项
+}
+
+export interface McpConfig {
+  mcpServers: Record<string, McpServer>;
 }
 
 /**
@@ -82,7 +92,8 @@ export class StorageService {
       apiKey: config.apiKey,
       model: config.model,
       contextTokens: config.contextTokens || 128000,
-      maxConcurrency: config.maxConcurrency || 5
+      maxConcurrency: config.maxConcurrency || 5,
+      role: config.role
     };
   }
 
@@ -132,6 +143,52 @@ export class StorageService {
   }
 
   /**
+   * 保存系统角色
+   */
+  static saveRole(role: string): void {
+    const config = StorageService.readConfig();
+    config.role = role;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 获取MCP配置
+   */
+  static getMcpConfig(): McpConfig {
+    const config = StorageService.readConfig();
+    return config.mcpConfig || { mcpServers: {} };
+  }
+
+  /**
+   * 保存MCP配置
+   */
+  static saveMcpConfig(mcpConfig: McpConfig): void {
+    const config = StorageService.readConfig();
+    config.mcpConfig = mcpConfig;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 获取MCP配置的JSON字符串（用于编辑）
+   */
+  static getMcpConfigJson(): string {
+    const mcpConfig = StorageService.getMcpConfig();
+    return JSON.stringify(mcpConfig, null, 2);
+  }
+
+  /**
+   * 从JSON字符串保存MCP配置
+   */
+  static saveMcpConfigFromJson(jsonString: string): void {
+    try {
+      const mcpConfig = JSON.parse(jsonString) as McpConfig;
+      StorageService.saveMcpConfig(mcpConfig);
+    } catch (error) {
+      throw new Error('Invalid JSON format for MCP configuration');
+    }
+  }
+
+  /**
    * 批量保存API配置
    */
   static saveApiConfig(apiConfig: ApiConfig): void {
@@ -141,6 +198,7 @@ export class StorageService {
     if (apiConfig.model !== undefined) config.model = apiConfig.model;
     if (apiConfig.contextTokens !== undefined) config.contextTokens = apiConfig.contextTokens;
     if (apiConfig.maxConcurrency !== undefined) config.maxConcurrency = apiConfig.maxConcurrency;
+    if (apiConfig.role !== undefined) config.role = apiConfig.role;
     StorageService.writeConfig(config);
   }
 
@@ -186,11 +244,11 @@ export class StorageService {
   static validateApiConfig(): { isValid: boolean; missing: string[] } {
     const config = StorageService.getApiConfig();
     const missing: string[] = [];
-    
+
     if (!config.baseUrl) missing.push('baseUrl');
     if (!config.apiKey) missing.push('apiKey');
     if (!config.model) missing.push('model');
-    
+
     return {
       isValid: missing.length === 0,
       missing

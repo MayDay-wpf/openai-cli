@@ -189,6 +189,8 @@ export const zh: Messages = {
       model: '设置默认模型',
       contextTokens: '设置上下文Token',
       maxConcurrency: '设置API最大并发',
+      role: '设置系统角色',
+      mcpConfig: '编辑 MCP 配置',
       viewConfig: '查看当前配置',
       resetConfig: '重置所有配置',
       back: '← 返回主菜单'
@@ -199,6 +201,8 @@ export const zh: Messages = {
       model: '选择默认使用的AI模型',
       contextTokens: '设置模型上下文Token数量',
       maxConcurrency: '设置API请求的最大并发数量',
+      role: '设置AI助手的系统角色和行为特征',
+      mcpConfig: '编辑 Model Context Protocol (MCP) 服务器配置',
       viewConfig: '查看当前保存的所有配置信息',
       resetConfig: '清除所有已保存的配置',
       back: '返回到主菜单界面'
@@ -209,11 +213,15 @@ export const zh: Messages = {
       modelInput: '请输入默认模型名称',
       contextTokensInput: '请输入上下文Token数量',
       maxConcurrencyInput: '请输入最大并发数',
+      roleInput: '请编辑系统角色描述',
+      mcpConfigInput: '请编辑 MCP 配置 JSON',
       baseUrlPlaceholder: 'https://api.openai.com/v1',
       apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       modelPlaceholder: 'gpt-4o-mini',
       contextTokensPlaceholder: '128000',
       maxConcurrencyPlaceholder: '5',
+      rolePlaceholder: '你是一个专业的AI编程助手，具有以下特点：\n- 熟练掌握多种编程语言和框架\n- 能够提供清晰、准确的技术解决方案\n- 具有丰富的软件开发经验\n- 善于解释复杂的技术概念\n- 注重代码质量和最佳实践\n\n请根据用户的具体需求提供专业的编程建议和解决方案。',
+      mcpConfigPlaceholder: '{\n  "mcpServers": {\n    "context7": {\n      "url": "https://mcp.context7.com/mcp"\n    },\n    "npm-search": {\n      "command": "npx",\n      "args": ["-y", "npm-search-mcp-server"]\n    }\n  }\n}',
       confirmReset: '确定要重置所有配置吗？此操作不可撤销'
     },
     messages: {
@@ -222,7 +230,15 @@ export const zh: Messages = {
       resetCancelled: '重置操作已取消',
       invalidInput: '输入无效，请重新输入',
       currentConfig: '当前配置信息',
-      noConfigFound: '未找到配置信息'
+      noConfigFound: '未找到配置信息',
+      roleEditorPrompt: '按回车键打开编辑器，编辑完成后保存并关闭编辑器即可自动保存配置',
+      mcpConfigEditorPrompt: '按回车键打开JSON编辑器，编辑完成后保存并关闭编辑器即可自动保存配置',
+      invalidUrl: '请输入有效的URL地址',
+      invalidNumber: '请输入有效的正数',
+      contextTokensRange: '上下文Token数量应在 1,000 到 2,000,000 之间',
+      maxConcurrencyRange: '最大并发数应在 1 到 100 之间',
+      allConfigured: '所有配置项已设置完成',
+      invalidJson: '无效的JSON格式，请检查语法'
     },
     labels: {
       baseUrl: 'API 基础地址',
@@ -230,6 +246,8 @@ export const zh: Messages = {
       model: '默认模型',
       contextTokens: '上下文Token',
       maxConcurrency: 'API最大并发',
+      role: '系统角色',
+      mcpConfig: 'MCP 配置',
       status: '状态',
       configured: '已配置',
       notConfigured: '未配置'
@@ -243,6 +261,37 @@ export const zh: Messages = {
       pressEnter: '按回车键继续...',
       yes: '是',
       no: '否'
+    }
+  },
+  systemDetector: {
+    title: '系统状态检测',
+    checking: '正在检测系统配置...',
+    roleTitle: '系统角色设置',
+    mcpTitle: 'MCP 工具服务',
+    noRole: '未设置系统角色',
+    noMcpServices: '未配置MCP服务',
+    mcpConnecting: '正在连接MCP服务...',
+    mcpConnected: '已连接',
+    mcpFailed: '连接失败',
+    mcpNotFound: '服务未找到',
+    toolsFound: '可用工具',
+    noTools: '无可用工具',
+    serverStatus: '服务器状态',
+    ready: '系统准备就绪',
+    pressEnterToContinue: '按 Enter 键继续...',
+    progress: {
+      detectingRole: '检测系统角色配置',
+      detectingMcp: '检测MCP服务配置',
+      connectingMcp: '连接到MCP服务器',
+      fetchingTools: '获取可用工具列表',
+      completed: '系统检测完成'
+    },
+    transport: {
+      tryingHttp: '尝试HTTP连接',
+      httpFailed: 'HTTP连接失败，尝试SSE',
+      tryingSse: '尝试SSE连接',
+      sseFailed: 'SSE连接失败',
+      fallbackComplete: '使用备用连接方式'
     }
   },
   // 项目初始化多语言支持

@@ -1,10 +1,10 @@
+import { editor, input } from '@inquirer/prompts';
 import chalk from 'chalk';
 import figlet from 'figlet';
-import { input } from '@inquirer/prompts';
 import { languageService } from '../../services/language';
-import { StorageService, ApiConfig } from '../../services/storage';
-import { InteractiveMenu, MenuChoice } from '../components/menu';
+import { McpConfig, StorageService } from '../../services/storage';
 import { AnimationUtils, StringUtils } from '../../utils';
+import { InteractiveMenu, MenuChoice } from '../components/menu';
 
 export class ConfigPage {
   private readonly gradients = AnimationUtils.getGradients();
@@ -68,6 +68,16 @@ export class ConfigPage {
         description: messages.config.menuDescription.maxConcurrency
       },
       {
+        name: messages.config.menuOptions.role,
+        value: 'role',
+        description: messages.config.menuDescription.role
+      },
+      {
+        name: messages.config.menuOptions.mcpConfig,
+        value: 'mcpConfig',
+        description: messages.config.menuDescription.mcpConfig
+      },
+      {
         name: messages.config.menuOptions.viewConfig,
         value: 'viewConfig',
         description: messages.config.menuDescription.viewConfig
@@ -115,6 +125,14 @@ export class ConfigPage {
 
       case 'maxConcurrency':
         await this.editMaxConcurrency();
+        break;
+
+      case 'role':
+        await this.editRole();
+        break;
+
+      case 'mcpConfig':
+        await this.editMcpConfig();
         break;
 
       case 'viewConfig':
@@ -167,7 +185,7 @@ export class ConfigPage {
             new URL(input.trim());
             return true;
           } catch {
-            return 'Please enter a valid URL';
+            return messages.config.messages.invalidUrl;
           }
         }
       });
@@ -292,11 +310,11 @@ export class ConfigPage {
 
           const num = parseInt(input.trim());
           if (isNaN(num) || num <= 0) {
-            return 'Please enter a valid positive number';
+            return messages.config.messages.invalidNumber;
           }
-          
+
           if (num < 1000 || num > 2000000) {
-            return 'Context tokens should be between 1,000 and 2,000,000';
+            return messages.config.messages.contextTokensRange;
           }
 
           return true;
@@ -339,11 +357,11 @@ export class ConfigPage {
 
           const num = parseInt(input.trim());
           if (isNaN(num) || num <= 0) {
-            return 'Please enter a valid positive number';
+            return messages.config.messages.invalidNumber;
           }
-          
+
           if (num < 1 || num > 100) {
-            return 'Max concurrency should be between 1 and 100';
+            return messages.config.messages.maxConcurrencyRange;
           }
 
           return true;
@@ -360,6 +378,119 @@ export class ConfigPage {
       // 用户按 ESC 或 Ctrl+C 取消输入，直接返回
       console.log();
       return;
+    }
+  }
+
+  private async editRole(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getApiConfig();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.role));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.role));
+
+    if (currentConfig.role) {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: `));
+      console.log('    ' + chalk.gray(currentConfig.role.split('\n').join('\n    ')));
+    }
+    console.log();
+    console.log('  ' + chalk.gray(messages.config.messages.roleEditorPrompt));
+
+    try {
+      const role = await editor({
+        message: '  ' + messages.config.prompts.roleInput + ':',
+        default: currentConfig.role || messages.config.prompts.rolePlaceholder,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return messages.config.messages.invalidInput;
+          }
+          return true;
+        }
+      });
+
+      // 重置终端状态，防止影响后续交互
+      this.resetTerminalState();
+
+      if (role && role.trim()) {
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveRole(role.trim());
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
+      this.resetTerminalState();
+      console.log();
+      return;
+    }
+  }
+
+  private async editMcpConfig(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfigJson = StorageService.getMcpConfigJson();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.mcpConfig));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.mcpConfig));
+
+    if (currentConfigJson && currentConfigJson !== '{\n  "mcpServers": {}\n}') {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: `));
+      const lines = currentConfigJson.split('\n');
+      lines.slice(0, 5).forEach(line => {
+        console.log('    ' + chalk.gray(line));
+      });
+      if (lines.length > 5) {
+        console.log('    ' + chalk.gray('...'));
+      }
+    }
+    console.log();
+    console.log('  ' + chalk.gray(messages.config.messages.mcpConfigEditorPrompt));
+
+    try {
+      const mcpConfigJson = await editor({
+        message: '  ' + messages.config.prompts.mcpConfigInput + ':',
+        default: currentConfigJson || messages.config.prompts.mcpConfigPlaceholder,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return messages.config.messages.invalidInput;
+          }
+
+          // 验证JSON格式
+          try {
+            JSON.parse(input.trim());
+            return true;
+          } catch {
+            return messages.config.messages.invalidJson;
+          }
+        }
+      });
+
+      // 重置终端状态，防止影响后续交互
+      this.resetTerminalState();
+
+      if (mcpConfigJson && mcpConfigJson.trim()) {
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveMcpConfigFromJson(mcpConfigJson.trim());
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
+      this.resetTerminalState();
+      console.log();
+      return;
+    }
+  }
+
+  /**
+ * 重置终端状态，防止editor等外部工具影响后续交互
+ */
+  private resetTerminalState(): void {
+    // 恢复光标显示
+    process.stdout.write('\x1B[?25h');
+
+    // 确保stdin处于正确状态，让InteractiveMenu能正常工作
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      // 立即resume，让后续的InteractiveMenu可以正常接管
+      process.stdin.resume();
     }
   }
 
@@ -410,12 +541,43 @@ export class ConfigPage {
       config.maxConcurrency ? messages.config.labels.configured : messages.config.labels.notConfigured
     );
 
+    this.displayConfigItem(
+      messages.config.labels.role,
+      config.role,
+      config.role ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
+    const mcpConfig = StorageService.getMcpConfig();
+    const serverNames = Object.keys(mcpConfig.mcpServers);
+    const hasMcpServers = serverNames.length > 0;
+
+    let mcpDisplayValue: string | undefined;
+    if (hasMcpServers) {
+      // 显示服务器名称列表，如果太多则显示前几个
+      if (serverNames.length <= 3) {
+        mcpDisplayValue = serverNames.join(', ');
+      } else {
+        mcpDisplayValue = `${serverNames.slice(0, 2).join(', ')} +${serverNames.length - 2} more`;
+      }
+    }
+
+    // MCP配置需要特殊处理，显示更详细的信息
+    if (hasMcpServers) {
+      this.displayMcpConfigItem(messages.config.labels.mcpConfig, mcpConfig, messages.config.labels.configured);
+    } else {
+      this.displayConfigItem(
+        messages.config.labels.mcpConfig,
+        mcpDisplayValue,
+        messages.config.labels.notConfigured
+      );
+    }
+
     console.log();
 
     // 显示配置完整性状态
     const validation = StorageService.validateApiConfig();
     if (validation.isValid) {
-      console.log('  ' + chalk.green('✓ All configurations are set'));
+      console.log('  ' + chalk.green('✓ ' + messages.config.messages.allConfigured));
     } else {
       console.log('  ' + chalk.yellow(`⚠ Missing: ${validation.missing.join(', ')}`));
     }
@@ -423,10 +585,74 @@ export class ConfigPage {
 
   private displayConfigItem(label: string, value: string | undefined, status: string): void {
     const statusColor = value ? chalk.green : chalk.yellow;
-    const valueDisplay = value || chalk.gray('(not set)');
 
     console.log('  ' + chalk.white.bold(label + ':'));
-    console.log('    ' + chalk.gray('Value: ') + valueDisplay);
+
+    if (value) {
+      // 对于多行内容，特别是role，进行特殊处理
+      if (label.includes('角色') || label.includes('Role')) {
+        console.log('    ' + chalk.gray('Value: '));
+        const lines = value.split('\n');
+        lines.forEach(line => {
+          console.log('      ' + chalk.white(line));
+        });
+      } else {
+        console.log('    ' + chalk.gray('Value: ') + chalk.white(value));
+      }
+    } else {
+      console.log('    ' + chalk.gray('Value: ') + chalk.gray('(not set)'));
+    }
+
+    console.log('    ' + chalk.gray('Status: ') + statusColor(status));
+    console.log();
+  }
+
+  private displayMcpConfigItem(label: string, mcpConfig: McpConfig, status: string): void {
+    const statusColor = chalk.green;
+
+    console.log('  ' + chalk.white.bold(label + ':'));
+    console.log('    ' + chalk.gray('Servers: '));
+
+    // 显示每个MCP服务器的详细信息
+    Object.entries(mcpConfig.mcpServers).forEach(([serverName, serverConfig]) => {
+      console.log('      ' + chalk.cyan('●') + ' ' + chalk.white.bold(serverName));
+
+      // 智能检测服务器类型并显示相应信息
+      if (serverConfig.url) {
+        // HTTP/HTTPS类型的服务器
+        console.log('        ' + chalk.gray('Type: ') + chalk.white('HTTP'));
+        console.log('        ' + chalk.gray('URL: ') + chalk.white(serverConfig.url));
+      } else if (serverConfig.command) {
+        // STDIO类型的服务器
+        console.log('        ' + chalk.gray('Type: ') + chalk.white('STDIO'));
+        console.log('        ' + chalk.gray('Command: ') + chalk.white(serverConfig.command));
+        if (serverConfig.args && Array.isArray(serverConfig.args)) {
+          console.log('        ' + chalk.gray('Args: ') + chalk.white(serverConfig.args.join(' ')));
+        }
+      } else if (serverConfig.transport) {
+        // 其他传输类型
+        console.log('        ' + chalk.gray('Type: ') + chalk.white(serverConfig.transport.toUpperCase()));
+      } else {
+        // 未知类型，显示原始配置
+        console.log('        ' + chalk.gray('Type: ') + chalk.yellow('Unknown'));
+      }
+
+      // 显示其他配置信息（排除已经显示的主要字段）
+      const excludeKeys = ['url', 'command', 'args', 'transport'];
+      const extraConfig = Object.entries(serverConfig).filter(([key]) => !excludeKeys.includes(key));
+
+      if (extraConfig.length > 0) {
+        extraConfig.forEach(([key, value]) => {
+          let displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+          // 如果是token类似的敏感信息，进行部分隐藏
+          if (key.toLowerCase().includes('token') || key.toLowerCase().includes('key') || key.toLowerCase().includes('password')) {
+            displayValue = displayValue.length > 10 ? displayValue.substring(0, 8) + '...' : displayValue;
+          }
+          console.log('        ' + chalk.gray(`${key}: `) + chalk.white(displayValue));
+        });
+      }
+    });
+
     console.log('    ' + chalk.gray('Status: ') + statusColor(status));
     console.log();
   }
@@ -437,7 +663,7 @@ export class ConfigPage {
   private async waitForEnter(): Promise<void> {
     return new Promise((resolve) => {
       console.log('  ' + chalk.gray('Press Enter to continue...'));
-      
+
       // 确保stdin处于正确状态
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(true);

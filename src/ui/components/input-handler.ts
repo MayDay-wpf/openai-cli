@@ -1,7 +1,7 @@
 import chalk from 'chalk';
-import { CommandManager, Command } from './commands';
-import { FileSearchManager, FileSearchResult } from './files';
 import { Messages } from '../../types/language';
+import { CommandManager } from './commands';
+import { FileSearchManager, FileSearchResult } from './files';
 
 export interface InputSuggestion {
   type: 'command' | 'file';
@@ -67,22 +67,23 @@ export class InputHandler {
     if (lastAtIndex !== -1) {
       // 获取@后面的查询字符串
       const fileQuery = input.substring(lastAtIndex + 1);
-      
+
       // 如果查询字符串后面有空格，说明已经完成选择，不显示建议
       if (fileQuery.includes(' ')) {
         return state;
       }
-      
+
       const files = await this.fileSearchManager.searchFiles(fileQuery, 8);
-      
+
       if (files.length > 0) {
+        // 检查是否有同名文件需要特殊处理
+        const hasConflicts = this.checkForNameConflicts(files);
+
         state.suggestions = files.map(file => ({
           type: 'file',
           value: file.relativePath,
-          display: this.formatFileDisplay(file),
-          description: file.type === 'directory' 
-            ? this.messages.main.fileSearch.directory
-            : this.messages.main.fileSearch.file
+          display: this.formatFileDisplay(file, hasConflicts),
+          description: this.getFileDescription(file)
         }));
         state.showingSuggestions = true;
         state.suggestionsType = 'file';
@@ -94,26 +95,66 @@ export class InputHandler {
   }
 
   /**
+ * 检查是否有同名文件冲突
+ */
+  private checkForNameConflicts(files: FileSearchResult[]): boolean {
+    const nameSet = new Set<string>();
+    for (const file of files) {
+      if (nameSet.has(file.name)) {
+        return true; // 发现同名文件
+      }
+      nameSet.add(file.name);
+    }
+    return false;
+  }
+
+  /**
    * 格式化文件显示文本
    */
-  private formatFileDisplay(file: FileSearchResult): string {
-    const icon = file.type === 'directory' ? '[DIR]' : '[FILE]';
-    const name = file.name;
-    const dir = file.relativePath.includes('/') 
-      ? file.relativePath.substring(0, file.relativePath.lastIndexOf('/'))
-      : '';
-    
-    if (dir) {
-      return `${icon} ${name} (${dir})`;
+  private formatFileDisplay(file: FileSearchResult, hasConflicts: boolean = false): string {
+    const icon = file.type === 'directory' ? '📁' : '📄';
+
+    // 规范化路径分隔符
+    const normalizedPath = file.relativePath.replace(/\\/g, '/');
+
+    // 如果路径包含目录分隔符，分离文件名和目录路径
+    if (normalizedPath.includes('/')) {
+      const lastSlashIndex = normalizedPath.lastIndexOf('/');
+      const fileName = normalizedPath.substring(lastSlashIndex + 1);
+      const dirPath = normalizedPath.substring(0, lastSlashIndex);
+
+      // 当有同名文件冲突时，更突出地显示路径信息
+      if (hasConflicts) {
+        return `${icon} ${chalk.yellow(fileName)} ${chalk.blue('(' + dirPath + ')')}`;
+      } else {
+        return `${icon} ${fileName} ${chalk.dim('(' + dirPath + ')')}`;
+      }
     }
-    return `${icon} ${name}`;
+
+    // 根目录文件
+    return `${icon} ${normalizedPath}`;
+  }
+
+  /**
+ * 获取文件描述信息
+ */
+  private getFileDescription(file: FileSearchResult): string {
+    const baseType = file.type === 'directory'
+      ? this.messages.main.fileSearch.directory
+      : this.messages.main.fileSearch.file;
+
+    // 规范化路径显示
+    const normalizedPath = file.relativePath.replace(/\\/g, '/');
+
+    // 显示类型和完整路径，确保同名文件可区分
+    return `${baseType} • ${normalizedPath}`;
   }
 
   /**
    * 处理建议选择
    */
   handleSuggestionSelection(
-    currentInput: string, 
+    currentInput: string,
     suggestion: InputSuggestion
   ): string {
     if (suggestion.type === 'command') {
@@ -135,24 +176,30 @@ export class InputHandler {
   }
 
   /**
-   * 渲染建议列表
-   */
+ * 渲染建议列表
+ */
   renderSuggestions(suggestions: InputSuggestion[], selectedIndex: number): string[] {
     return suggestions.map((suggestion, index) => {
       const isSelected = index === selectedIndex;
       const prefix = isSelected ? chalk.cyan('● ') : chalk.gray('○ ');
-      
+
       let displayText: string;
       if (suggestion.type === 'command') {
         displayText = isSelected
           ? chalk.cyan.bold(suggestion.display) + ' - ' + chalk.white.bold(suggestion.description)
           : chalk.gray(suggestion.display) + ' - ' + chalk.gray(suggestion.description);
       } else {
-        displayText = isSelected
-          ? chalk.yellow.bold(suggestion.display) + ' - ' + chalk.white.bold(suggestion.description)
-          : chalk.gray(suggestion.display) + ' - ' + chalk.gray(suggestion.description);
+        // 文件类型：使用更清晰的格式显示
+        const display = suggestion.display;
+        const description = suggestion.description;
+
+        if (isSelected) {
+          displayText = chalk.yellow.bold(display) + chalk.white(' - ') + chalk.white.dim(description);
+        } else {
+          displayText = chalk.gray(display) + chalk.gray(' - ') + chalk.gray.dim(description);
+        }
       }
-      
+
       return prefix + displayText;
     });
   }
@@ -177,7 +224,7 @@ export class InputHandler {
   updateSelectedFiles(currentInput: string): void {
     // 从输入中提取所有@文件引用
     const fileReferences = this.extractFileReferences(currentInput);
-    
+
     // 更新选中文件列表，只保留仍在输入中的文件
     this.selectedFiles = new Set(fileReferences);
   }
@@ -190,14 +237,14 @@ export class InputHandler {
     // 匹配 @文件路径 模式，文件路径可以包含字母、数字、点、斜杠、连字符、下划线
     const regex = /@([a-zA-Z0-9./\-_]+)(?=\s|$)/g;
     let match;
-    
+
     while ((match = regex.exec(input)) !== null) {
       const filePath = match[1];
       if (filePath.length > 0) {
         fileReferences.push(filePath);
       }
     }
-    
+
     return fileReferences;
   }
 

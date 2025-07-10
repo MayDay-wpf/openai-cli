@@ -189,6 +189,8 @@ export const en: Messages = {
       model: 'Set Default Model',
       contextTokens: 'Set Context Tokens',
       maxConcurrency: 'Set Max Concurrency',
+      role: 'Set System Role',
+      mcpConfig: 'Edit MCP Config',
       viewConfig: 'View Current Config',
       resetConfig: 'Reset All Config',
       back: '← Back to Main Menu'
@@ -199,6 +201,8 @@ export const en: Messages = {
       model: 'Choose the default AI model to use',
       contextTokens: 'Set the number of context tokens for the model',
       maxConcurrency: 'Set the maximum number of concurrent API requests',
+      role: 'Set the system role and behavior characteristics of the AI assistant',
+      mcpConfig: 'Edit Model Context Protocol (MCP) server configuration',
       viewConfig: 'View all currently saved configuration',
       resetConfig: 'Clear all saved configurations',
       back: 'Return to the main menu interface'
@@ -209,11 +213,15 @@ export const en: Messages = {
       modelInput: 'Enter default model name',
       contextTokensInput: 'Enter context tokens count',
       maxConcurrencyInput: 'Enter maximum concurrency',
+      roleInput: 'Edit system role description',
+      mcpConfigInput: 'Edit MCP configuration JSON',
       baseUrlPlaceholder: 'https://api.openai.com/v1',
       apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
       modelPlaceholder: 'gpt-4o-mini',
       contextTokensPlaceholder: '128000',
       maxConcurrencyPlaceholder: '5',
+      rolePlaceholder: 'You are a professional AI programming assistant with the following characteristics:\n- Proficient in multiple programming languages and frameworks\n- Able to provide clear and accurate technical solutions\n- Rich experience in software development\n- Good at explaining complex technical concepts\n- Focus on code quality and best practices\n\nPlease provide professional programming advice and solutions based on user-specific needs.',
+      mcpConfigPlaceholder: '{\n  "mcpServers": {\n    "context7": {\n      "url": "https://mcp.context7.com/mcp"\n    },\n    "npm-search": {\n      "command": "npx",\n      "args": ["-y", "npm-search-mcp-server"]\n    }\n  }\n}',
       confirmReset: 'Are you sure you want to reset all configurations? This action cannot be undone'
     },
     messages: {
@@ -222,7 +230,15 @@ export const en: Messages = {
       resetCancelled: 'Reset operation cancelled',
       invalidInput: 'Invalid input, please try again',
       currentConfig: 'Current Configuration',
-      noConfigFound: 'No configuration found'
+      noConfigFound: 'No configuration found',
+      roleEditorPrompt: 'Press Enter to open editor, save and close the editor to automatically save configuration',
+      mcpConfigEditorPrompt: 'Press Enter to open JSON editor, save and close the editor to automatically save configuration',
+      invalidUrl: 'Please enter a valid URL',
+      invalidNumber: 'Please enter a valid positive number',
+      contextTokensRange: 'Context tokens should be between 1,000 and 2,000,000',
+      maxConcurrencyRange: 'Max concurrency should be between 1 and 100',
+      allConfigured: 'All configurations are set',
+      invalidJson: 'Invalid JSON format, please check syntax'
     },
     labels: {
       baseUrl: 'API Base URL',
@@ -230,6 +246,8 @@ export const en: Messages = {
       model: 'Default Model',
       contextTokens: 'Context Tokens',
       maxConcurrency: 'Max Concurrency',
+      role: 'System Role',
+      mcpConfig: 'MCP Config',
       status: 'Status',
       configured: 'Configured',
       notConfigured: 'Not Configured'
@@ -243,6 +261,37 @@ export const en: Messages = {
       pressEnter: 'Press Enter to continue...',
       yes: 'Yes',
       no: 'No'
+    }
+  },
+  systemDetector: {
+    title: 'System Status Detection',
+    checking: 'Detecting system configuration...',
+    roleTitle: 'System Role Settings',
+    mcpTitle: 'MCP Tool Services',
+    noRole: 'No system role set',
+    noMcpServices: 'No MCP services configured',
+    mcpConnecting: 'Connecting to MCP services...',
+    mcpConnected: 'Connected',
+    mcpFailed: 'Connection failed',
+    mcpNotFound: 'Service not found',
+    toolsFound: 'Available tools',
+    noTools: 'No tools available',
+    serverStatus: 'Server status',
+    ready: 'System ready',
+    pressEnterToContinue: 'Press Enter to continue...',
+    progress: {
+      detectingRole: 'Detecting system role configuration',
+      detectingMcp: 'Detecting MCP service configuration',
+      connectingMcp: 'Connecting to MCP servers',
+      fetchingTools: 'Fetching available tools',
+      completed: 'System detection completed'
+    },
+    transport: {
+      tryingHttp: 'Trying HTTP connection',
+      httpFailed: 'HTTP connection failed, trying SSE',
+      tryingSse: 'Trying SSE connection',
+      sseFailed: 'SSE connection failed',
+      fallbackComplete: 'Using fallback connection method'
     }
   },
   // Project initialization multilingual support

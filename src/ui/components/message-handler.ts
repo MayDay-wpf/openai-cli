@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { languageService } from '../../services/language';
 import { ChatMessage, openAIService } from '../../services/openai';
 import { StorageService } from '../../services/storage';
+import { SystemDetector } from '../../services/system-detector';
 import { Messages } from '../../types/language';
 import { AnimationUtils, LoadingController, TokenCalculator } from '../../utils';
 import type { Message } from '../../utils/token-calculator';
@@ -21,6 +22,7 @@ export interface MessageHandlerCallbacks {
     getSelectedFiles: () => string[];
     addMessage: (message: Message) => void;
     getRecentMessages: (count?: number) => Message[];
+    getSystemDetector: () => SystemDetector;
 }
 
 /**
@@ -372,6 +374,9 @@ export class MessageHandler {
             // 构建聊天消息历史，包含选中的文件信息
             const chatMessages = this.buildChatMessages();
 
+            // 获取MCP工具
+            const tools = await this.getMcpTools();
+
             let aiResponseContent = '';
             let isFirstChunk = true;
 
@@ -381,6 +386,10 @@ export class MessageHandler {
             // 流式调用OpenAI
             await openAIService.streamChat({
                 messages: chatMessages,
+                tools: tools.length > 0 ? tools : undefined,
+                onToolCall: async (toolCall: any) => {
+                    return await this.handleToolCall(toolCall);
+                },
                 onChunk: (chunk: string) => {
                     // 如果是第一个chunk，停止loading动画并显示AI标签
                     if (isFirstChunk) {
@@ -455,6 +464,45 @@ export class MessageHandler {
     }
 
     /**
+     * 获取MCP工具定义
+     */
+    private async getMcpTools(): Promise<any[]> {
+        try {
+            const systemDetector = this.callbacks.getSystemDetector();
+            const tools = await systemDetector.getAllToolDefinitions();
+            return tools;
+        } catch (error) {
+            console.warn('Failed to get MCP tools:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 处理工具调用
+     */
+    private async handleToolCall(toolCall: any): Promise<any> {
+        try {
+            const functionName = toolCall.function.name;
+            const parameters = JSON.parse(toolCall.function.arguments || '{}');
+
+            console.log(chalk.cyan(`调用工具: ${functionName}`));
+            // console.log(chalk.gray(`参数: ${JSON.stringify(parameters, null, 2)}`));
+
+            const systemDetector = this.callbacks.getSystemDetector();
+            const result = await systemDetector.executeMcpTool(functionName, parameters);
+
+            console.log(chalk.green(`工具调用成功`));
+            // console.log(chalk.gray(`结果: ${JSON.stringify(result, null, 2)}`));
+
+            return result;
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            console.log(chalk.red(`工具调用失败: ${errorMsg}`));
+            throw error;
+        }
+    }
+
+    /**
      * 构建包含历史记录和文件信息的聊天消息
      */
     private buildChatMessages(): ChatMessage[] {
@@ -464,6 +512,12 @@ export class MessageHandler {
         // 构建系统消息
         const selectedFiles = this.callbacks.getSelectedFiles();
         let systemMessage = currentMessages.main.messages.system.basePrompt;
+
+        // 添加系统角色提示词
+        const apiConfig = StorageService.getApiConfig();
+        if (apiConfig.role) {
+            systemMessage += '\n\n' + apiConfig.role;
+        }
 
         if (selectedFiles.length > 0) {
             const fileList = selectedFiles.map(file => `- ${file}`).join('\n');

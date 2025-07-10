@@ -187,6 +187,8 @@ export interface Messages {
       model: string;
       contextTokens: string;
       maxConcurrency: string;
+      role: string;
+      mcpConfig: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -197,6 +199,8 @@ export interface Messages {
       model: string;
       contextTokens: string;
       maxConcurrency: string;
+      role: string;
+      mcpConfig: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -207,11 +211,15 @@ export interface Messages {
       modelInput: string;
       contextTokensInput: string;
       maxConcurrencyInput: string;
+      roleInput: string;
+      mcpConfigInput: string;
       baseUrlPlaceholder: string;
       apiKeyPlaceholder: string;
       modelPlaceholder: string;
       contextTokensPlaceholder: string;
       maxConcurrencyPlaceholder: string;
+      rolePlaceholder: string;
+      mcpConfigPlaceholder: string;
       confirmReset: string;
     };
     messages: {
@@ -221,6 +229,14 @@ export interface Messages {
       invalidInput: string;
       currentConfig: string;
       noConfigFound: string;
+      roleEditorPrompt: string;
+      mcpConfigEditorPrompt: string;
+      invalidUrl: string;
+      invalidNumber: string;
+      contextTokensRange: string;
+      maxConcurrencyRange: string;
+      allConfigured: string;
+      invalidJson: string;
     };
     labels: {
       baseUrl: string;
@@ -228,6 +244,8 @@ export interface Messages {
       model: string;
       contextTokens: string;
       maxConcurrency: string;
+      role: string;
+      mcpConfig: string;
       status: string;
       configured: string;
       notConfigured: string;
@@ -241,6 +259,37 @@ export interface Messages {
       pressEnter: string;
       yes: string;
       no: string;
+    };
+  };
+  systemDetector: {
+    title: string;
+    checking: string;
+    roleTitle: string;
+    mcpTitle: string;
+    noRole: string;
+    noMcpServices: string;
+    mcpConnecting: string;
+    mcpConnected: string;
+    mcpFailed: string;
+    mcpNotFound: string;
+    toolsFound: string;
+    noTools: string;
+    serverStatus: string;
+    ready: string;
+    pressEnterToContinue: string;
+    progress: {
+      detectingRole: string;
+      detectingMcp: string;
+      connectingMcp: string;
+      fetchingTools: string;
+      completed: string;
+    };
+    transport: {
+      tryingHttp: string;
+      httpFailed: string;
+      tryingSse: string;
+      sseFailed: string;
+      fallbackComplete: string;
     };
   };
   // 添加项目初始化和文档查询的多语言支持
