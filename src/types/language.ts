@@ -161,19 +161,30 @@ export interface Messages {
       missingItems: string;
       useConfig: string;
       starting: string;
-      phases: {
+      steps: {
         scanning: string;
         analyzing: string;
         generating: string;
-        consolidating: string;
+        saving: string;
+      };
+      aiPrompts: {
+        systemPrompt: string;
+        userPrompt: string;
+        fallback: string;
+      };
+      markdownTemplate: {
+        projectDescription: string;
+        projectType: string;
+        techStack: string;
+        projectStructure: string;
+        fileFunctions: string;
+        generatedBy: string;
       };
       completed: string;
       savedTo: string;
       description: string;
       failed: string;
       interrupted: string;
-      resuming: string;
-      progressSaved: string;
       ctrlcToCancel: string;
     };
   };
@@ -290,53 +301,6 @@ export interface Messages {
       tryingSse: string;
       sseFailed: string;
       fallbackComplete: string;
-    };
-  };
-  // 添加项目初始化和文档查询的多语言支持
-  projectInit: {
-    errors: {
-      loadFailed: string;
-      documentNotFound: string;
-      parseFailed: string;
-      tokenCalculationFailed: string;
-    };
-    prompts: {
-      systemAnalyzer: string;
-      systemFileAnalyzer: string;
-      userAnalyzeProject: string;
-      userAnalyzeFile: string;
-    };
-    warnings: {
-      contentTruncated: string;
-      fallbackEncoding: string;
-    };
-    info: {
-      batchDelay: string;
-      progressSaved: string;
-    };
-  };
-  projectDoc: {
-    errors: {
-      documentNotFound: string;
-      loadFailed: string;
-      invalidFormat: string;
-      fuzzyMatchNotFound: string;
-    };
-    warnings: {
-      cacheExpired: string;
-      noContent: string;
-    };
-    info: {
-      cacheHit: string;
-      exportCompleted: string;
-    };
-    stats: {
-      totalFiles: string;
-      fileTypes: string;
-      avgSize: string;
-      totalSize: string;
-      topTags: string;
-      mostConnected: string;
     };
   };
 } 

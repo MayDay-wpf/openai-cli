@@ -29,14 +29,14 @@ export class ProgressBar {
    */
   update(current: number, data: { phase?: string; file?: string } = {}): void {
     this.current = Math.min(current, this.total);
-    
+
     const percentage = Math.round((this.current / this.total) * 100);
     const completed = Math.round((this.current / this.total) * this.width);
     const remaining = this.width - completed;
-    
+
     // 构建进度条
     const bar = chalk.green('='.repeat(completed)) + chalk.gray('-'.repeat(remaining));
-    
+
     // 构建显示文本
     let line = this.format
       .replace('{bar}', bar)
@@ -53,7 +53,7 @@ export class ProgressBar {
     if (this.clear && this.lastLine) {
       process.stdout.write('\r' + ' '.repeat(this.lastLine.length) + '\r');
     }
-    
+
     process.stdout.write(line);
     this.lastLine = line;
   }
@@ -63,7 +63,7 @@ export class ProgressBar {
    */
   complete(message?: string): void {
     this.update(this.total);
-    
+
     if (message) {
       if (this.clear) {
         process.stdout.write('\r' + ' '.repeat(this.lastLine.length) + '\r');
@@ -89,7 +89,7 @@ export class ProgressBar {
     } else {
       process.stdout.write('\n');
     }
-    
+
     // 只有当message不为空时才输出错误信息
     if (message) {
       console.log(chalk.red('[ERROR] ' + message));
@@ -127,7 +127,7 @@ export class StepProgress {
       const step = this.steps[this.currentStep];
       const stepNum = this.currentStep + 1;
       const total = this.steps.length;
-      
+
       console.log(chalk.blue(`[${stepNum}/${total}]`) + ` ${step}`);
       this.currentStep++;
     }
@@ -139,14 +139,14 @@ export class StepProgress {
   complete(): void {
     const elapsed = Date.now() - this.startTime;
     const seconds = (elapsed / 1000).toFixed(1);
-    console.log(chalk.green(`[COMPLETE] 所有步骤完成！用时 ${seconds} 秒`));
+    console.log(chalk.green(`✅ 所有步骤完成！用时 ${seconds} 秒`));
   }
 
   /**
    * 显示错误
    */
   error(message: string): void {
-    console.log(chalk.red(`[ERROR] ${message}`));
+    console.log(chalk.red(`❌ ${message}`));
   }
 }
 
@@ -175,7 +175,7 @@ export class MultiPhaseProgress {
 
     const phase = this.phases[this.currentPhase];
     this.phaseProgress = Math.min(progress, phase.weight);
-    
+
     // 计算总进度
     const totalProgress = this.phases
       .slice(0, this.currentPhase)

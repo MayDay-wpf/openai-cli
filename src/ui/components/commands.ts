@@ -34,11 +34,6 @@ export class CommandManager {
         description: mainCommands.help.description
       },
       {
-        value: '/config',
-        name: mainCommands.config.name,
-        description: mainCommands.config.description
-      },
-      {
         value: '/history',
         name: mainCommands.history.name,
         description: mainCommands.history.description

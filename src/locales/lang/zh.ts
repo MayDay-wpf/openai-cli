@@ -91,7 +91,7 @@ export const zh: Messages = {
       },
       init: {
         name: '/init',
-        description: '初始化项目文档'
+        description: '生成项目描述文档 (sawyou.md)'
       }
     },
     messages: {
@@ -162,21 +162,32 @@ export const zh: Messages = {
       configIncomplete: 'API配置不完整，无法使用AI服务',
       missingItems: '缺少配置项',
       useConfig: '请使用 /config 命令完成配置',
-      starting: '开始初始化项目文档...',
-      phases: {
+      starting: '开始生成项目描述文档...',
+      steps: {
         scanning: '扫描项目文件',
         analyzing: '分析项目结构',
-        generating: '生成文件文档',
-        consolidating: '生成 JSON 文档'
+        generating: '生成项目描述',
+        saving: '保存 sawyou.md 文件'
       },
-      completed: '项目文档初始化完成',
+      aiPrompts: {
+        systemPrompt: '你是一个代码分析师。请用一句话简洁描述文件的主要功能。返回中文，不超过30字。',
+        userPrompt: '文件路径：{filePath}\n\n文件内容：\n{fileContent}',
+        fallback: '代码文件'
+      },
+      markdownTemplate: {
+        projectDescription: '项目描述',
+        projectType: '项目类型',
+        techStack: '技术栈',
+        projectStructure: '项目结构',
+        fileFunctions: '文件功能简述',
+        generatedBy: '此文档由 OpenAI CLI 自动生成于'
+      },
+      completed: '项目描述文档生成完成',
       savedTo: '文档已保存到',
-      description: '您现在可以将此文档提供给AI助手以获得更好的项目理解',
-      failed: '初始化失败',
-      interrupted: '初始化被中断',
-      resuming: '恢复初始化进度',
-      progressSaved: '进度已保存',
-      ctrlcToCancel: '按 Ctrl+C 可中断初始化'
+      description: '您现在可以将此 Markdown 文档提供给AI助手以获得更好的项目理解',
+      failed: '生成失败',
+      interrupted: '生成被中断',
+      ctrlcToCancel: '按 Ctrl+C 可中断生成'
     }
   },
   config: {
@@ -292,54 +303,6 @@ export const zh: Messages = {
       tryingSse: '尝试SSE连接',
       sseFailed: 'SSE连接失败',
       fallbackComplete: '使用备用连接方式'
-    }
-  },
-  // 项目初始化多语言支持
-  projectInit: {
-    errors: {
-      loadFailed: '加载项目文档失败',
-      documentNotFound: '项目文档不存在',
-      parseFailed: '解析文档失败',
-      tokenCalculationFailed: '文件的token计算失败，使用字符数截断'
-    },
-    prompts: {
-      systemAnalyzer: '你是一个专业的代码分析师。请分析这个项目并生成结构化的 JSON 数据。\n\n要求：\n1. 分析项目类型、技术栈、主要功能\n2. 识别项目依赖和入口点\n3. 分析目录结构和架构模式\n4. 返回严格的 JSON 格式，包含 overview 和 structure 两个部分',
-      systemFileAnalyzer: '你是一个专业的代码分析师。请分析以下代码文件并返回结构化的 JSON 格式文档。\n\n要求：\n1. 分析文件的主要功能和用途\n2. 提取导出、导入、函数、类等信息\n3. 返回严格的 JSON 格式\n\nJSON 格式示例：\n{\n  "purpose": "文件主要功能描述",\n  "exports": [{"name": "功能名", "type": "function", "description": "描述"}],\n  "imports": [{"from": "./path", "imports": ["name1"], "type": "named"}],\n  "functions": [{"name": "funcName", "isAsync": false, "isExported": true}],\n  "classes": [],\n  "interfaces": [],\n  "constants": [],\n  "tags": ["tag1", "tag2"],\n  "importance": "high"\n}',
-      userAnalyzeProject: '请分析这个项目并返回 JSON 格式的概览和结构信息。JSON 格式如下：\n{\n  "overview": {\n    "type": "cli-tool",\n    "techStack": ["TypeScript", "Node.js"],\n    "mainFeatures": ["功能1", "功能2"],\n    "dependencies": [{"name": "chalk", "type": "runtime"}],\n    "entryPoints": [{"path": "src/index.ts", "type": "main", "description": "主入口"}]\n  },\n  "structure": {\n    "tree": {"name": "root", "type": "directory", "path": "", "children": []},\n    "directories": {},\n    "architecture": {"pattern": "modular", "layers": [], "dataFlow": []}\n  }\n}',
-      userAnalyzeFile: '请分析以下文件并返回 JSON 格式的文档：\n\n文件路径: {filePath}\n文件内容:\n```\n{fileContent}\n```'
-    },
-    warnings: {
-      contentTruncated: '文件内容已截断，原始文件共{totalLines}行，当前显示{currentLines}行',
-      fallbackEncoding: '使用字符数截断'
-    },
-    info: {
-      batchDelay: '批次间短暂延迟，避免API限流',
-      progressSaved: '进度已保存'
-    }
-  },
-  // 项目文档查询多语言支持
-  projectDoc: {
-    errors: {
-      documentNotFound: '项目文档不存在',
-      loadFailed: '加载项目文档失败',
-      invalidFormat: '文档格式无效',
-      fuzzyMatchNotFound: '未找到匹配的文件'
-    },
-    warnings: {
-      cacheExpired: '缓存已过期，重新加载文档',
-      noContent: '文件内容无法读取'
-    },
-    info: {
-      cacheHit: '使用缓存的文档',
-      exportCompleted: '文档导出完成'
-    },
-    stats: {
-      totalFiles: '文件总数',
-      fileTypes: '文件类型分布',
-      avgSize: '平均文件大小',
-      totalSize: '总文件大小',
-      topTags: '热门标签',
-      mostConnected: '连接度最高的文件'
     }
   }
 }; 
