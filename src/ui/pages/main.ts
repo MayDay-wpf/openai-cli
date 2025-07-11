@@ -315,65 +315,39 @@ export class MainPage {
           }
         }
 
-        // 如果 CommandManager 没有处理，检查是否需要处理文件选择
-        const selectedTextFiles = this.getSelectedTextFiles();
-        if (this.commandManager.isWaitingForFileImportState() && selectedTextFiles.some(f => f.startsWith('@'))) {
-          const fileResult = await this.commandManager.handleFileSelection(selectedTextFiles, this.messages);
-          if (fileResult.handled) {
-            if (fileResult.newMessages) {
-              this.messages = fileResult.newMessages;
-            }
-            continue;
+        // 如果 CommandManager 返回未处理，则有可能是普通消息或包含文件引用的消息
+        if (!commandResult.handled) {
+          // 检查是否是普通消息
+          if (!userInput.startsWith('/')) {
+            // 添加用户消息并直接显示
+            this.messageHandler.addUserMessage(userInput);
+
+            // 处理AI请求
+            await this.messageHandler.processAIRequest();
+            continue; // 继续下一次循环
           }
-        }
 
-        // 处理其他命令
-        if (userInput === '/help') {
-          this.helpManager.showHelp(this.commandManager.getCommands());
-          continue;
-        }
-
-        if (userInput === '/config') {
-          process.stdout.write(chalk.yellow(this.currentMessages.main.messages.configInDevelopment + '\n'));
-          continue;
-        }
-
-        if (userInput === '/history') {
-          this.messageHandler.showHistory(this.messages);
-          continue;
-        }
-
-        if (userInput === '/edit-history') {
-          // /edit-history 命令由 CommandManager 处理
-          const commandResult = await this.commandManager.handleInput(userInput, this.messages);
-          if (commandResult.handled && commandResult.newMessages) {
-            this.messages = commandResult.newMessages;
+          // 处理未被 commandManager.handleInput 捕获的其他命令
+          switch (userInput) {
+            case '/help':
+              this.helpManager.showHelp(this.commandManager.getCommands());
+              break;
+            case '/config':
+              process.stdout.write(chalk.yellow(this.currentMessages.main.messages.configInDevelopment + '\n'));
+              break;
+            case '/history':
+              this.messageHandler.showHistory(this.messages);
+              break;
+            case '/init':
+              await this.handleInitCommand();
+              break;
+            default:
+              // 未知命令
+              process.stdout.write(chalk.red(this.currentMessages.main.messages.unknownCommand.replace('{command}', userInput) + '\n'));
+              break;
           }
           continue;
         }
-
-        if (userInput === '/init') {
-          await this.handleInitCommand();
-          continue;
-        }
-
-        // 检查是否选择了 JSON 文件，询问是否要导入历史记录
-        const selectedFiles = this.getSelectedTextFiles();
-        if (selectedFiles.some(f => f.includes('@') && f.includes('.json'))) {
-          const jsonFiles = selectedFiles.filter(file => file.endsWith('.json'));
-          if (jsonFiles.length > 0) {
-            const historyMgmt = this.currentMessages.main.historyManagement;
-            console.log(chalk.yellow(`${historyMgmt.jsonFileDetected}：${jsonFiles.join(', ')}`));
-            console.log(chalk.cyan(historyMgmt.historyImportTip));
-            console.log(chalk.gray(`${historyMgmt.directImportTip}：@${jsonFiles[0]}`));
-          }
-        }
-
-        // 添加用户消息并直接显示
-        this.messageHandler.addUserMessage(userInput);
-
-        // 处理AI请求
-        await this.messageHandler.processAIRequest();
       }
     } catch (error) {
       console.error('聊天循环出现错误:', error);

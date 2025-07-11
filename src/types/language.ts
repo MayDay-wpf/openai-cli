@@ -98,6 +98,7 @@ export interface Messages {
       ai: string;
       userLabel: string;
       aiLabel: string;
+      unknownCommand: string;
       codeBlock: {
         lineLabel: string;
         unknownLanguage: string;

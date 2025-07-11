@@ -182,10 +182,8 @@ export class CommandManager {
     const historyMgmt = this.messages.main.historyManagement;
 
     if (userInput.startsWith('@')) {
-      // 用户输入了文件引用，但可能不是完整的 .json 文件路径
-      // 这里需要从调用方获取选中的文件列表
-      // 暂时返回需要外部处理的状态
-      return { handled: false }; // 让调用方处理文件选择逻辑
+      // 用户通过文件选择器或直接输入了文件路径
+      return await this.handleDirectFileImport(userInput, currentMessages);
     } else {
       // 用户输入了其他内容，取消文件导入模式
       this.isWaitingForFileImport = false;
@@ -405,22 +403,5 @@ export class CommandManager {
   // 检查是否在等待文件导入
   isWaitingForFileImportState(): boolean {
     return this.isWaitingForFileImport;
-  }
-
-  // 处理文件选择结果
-  async handleFileSelection(selectedFiles: string[], currentMessages: Message[]): Promise<CommandExecutionResult> {
-    if (!this.isWaitingForFileImport) {
-      return { handled: false };
-    }
-
-    const jsonFiles = selectedFiles.filter(file => file.endsWith('.json'));
-    if (jsonFiles.length > 0) {
-      this.isWaitingForFileImport = false;
-      return await this.importHistoryFromFile(jsonFiles[0], currentMessages);
-    } else {
-      const historyMgmt = this.messages.main.historyManagement;
-      console.log(chalk.red(historyMgmt.selectJsonFileOnly));
-      return { handled: true, shouldContinue: true };
-    }
   }
 } 
