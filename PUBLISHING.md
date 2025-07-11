@@ -145,6 +145,9 @@ openai-cli --version
 
 # 卸载测试版本
 npm uninstall -g openai-cli-unofficial
+
+# 全局更新测试
+npm install -g openai-cli-unofficial
 ```
 
 ## 📊 发布状态监控
