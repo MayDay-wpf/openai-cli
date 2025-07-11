@@ -253,6 +253,8 @@ export interface Messages {
       maxConcurrencyRange: string;
       allConfigured: string;
       invalidJson: string;
+      mcpConfigUpdated: string;
+      mcpSystemServicesRestored: string;
     };
     labels: {
       baseUrl: string;
@@ -306,6 +308,26 @@ export interface Messages {
       tryingSse: string;
       sseFailed: string;
       fallbackComplete: string;
+    };
+    builtinServices: {
+      name: string;
+      running: string;
+      protected: string;
+      cannotDelete: string;
+    };
+    services: {
+      fileReader: {
+        name: string;
+        description: string;
+      };
+      fileOperations: {
+        name: string;
+        description: string;
+      };
+    };
+    validation: {
+      mcpConfigStructure: string;
+      invalidJson: string;
     };
   };
 } 

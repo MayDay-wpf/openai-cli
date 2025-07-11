@@ -36,12 +36,58 @@ class StreamRenderer {
     private currentLine: string = '';
     private codeLineNumber: number = 1;
 
+    // 支持的语言列表（常见的编程语言）
+    private supportedLanguages = new Set([
+        'javascript', 'js', 'typescript', 'ts', 'python', 'py', 'java', 
+        'cpp', 'c++', 'c', 'csharp', 'cs', 'php', 'ruby', 'go', 
+        'rust', 'swift', 'kotlin', 'scala', 'sql', 'html', 'css', 
+        'scss', 'sass', 'less', 'xml', 'json', 'yaml', 'yml', 
+        'bash', 'sh', 'shell', 'powershell', 'dockerfile', 'makefile',
+        'perl', 'lua', 'r', 'matlab', 'objective-c', 'dart', 'elixir',
+        'erlang', 'haskell', 'clojure', 'groovy', 'actionscript'
+    ]);
+
     constructor() {
         // 配置marked选项
         marked.setOptions({
             breaks: true,
             gfm: true,
         });
+    }
+
+    /**
+     * 检查语言是否被支持，如果不支持则返回默认配置
+     */
+    private checkLanguageSupport(language: string): { isSupported: boolean; fallbackLanguage?: string } {
+        if (!language || language.trim() === '') {
+            return { isSupported: false };
+        }
+
+        const normalizedLang = language.toLowerCase().trim();
+        
+        // 处理一些特殊的语言别名
+        const languageAliases: { [key: string]: string } = {
+            'vue': 'html',  // Vue文件可以用HTML高亮作为回退
+            'jsx': 'javascript',
+            'tsx': 'typescript',
+            'vue.js': 'html',
+            'vuejs': 'html',
+            'svelte': 'html',
+            'angular': 'typescript',
+            'react': 'javascript'
+        };
+
+        // 检查是否有别名映射
+        if (languageAliases[normalizedLang]) {
+            return { isSupported: true, fallbackLanguage: languageAliases[normalizedLang] };
+        }
+
+        // 检查是否直接支持
+        if (this.supportedLanguages.has(normalizedLang)) {
+            return { isSupported: true };
+        }
+
+        return { isSupported: false };
     }
 
     /**
@@ -135,15 +181,19 @@ class StreamRenderer {
      * 代码高亮（完整代码块）
      */
     private highlightCode(code: string, language: string): string {
+        const languageCheck = this.checkLanguageSupport(language);
+        
         try {
-            if (language && language.length > 0) {
-                return highlight(code, { language: language });
+            if (languageCheck.isSupported) {
+                const targetLanguage = languageCheck.fallbackLanguage || language;
+                return highlight(code, { language: targetLanguage });
             } else {
-                return highlight(code);
+                // 不支持的语言使用黄色高亮
+                return chalk.yellow(code);
             }
         } catch (error) {
-            // 如果高亮失败，返回原始代码
-            return chalk.gray(code);
+            // 如果高亮失败，也使用黄色高亮
+            return chalk.yellow(code);
         }
     }
 
@@ -151,15 +201,19 @@ class StreamRenderer {
      * 单行代码高亮
      */
     private highlightCodeLine(codeLine: string, language: string): string {
+        const languageCheck = this.checkLanguageSupport(language);
+        
         try {
-            if (language && language.length > 0) {
-                return highlight(codeLine, { language: language });
+            if (languageCheck.isSupported) {
+                const targetLanguage = languageCheck.fallbackLanguage || language;
+                return highlight(codeLine, { language: targetLanguage });
             } else {
-                return highlight(codeLine);
+                // 不支持的语言使用黄色高亮
+                return chalk.yellow(codeLine);
             }
         } catch (error) {
-            // 如果高亮失败，使用简单的样式
-            return chalk.gray(codeLine);
+            // 如果高亮失败，也使用黄色高亮
+            return chalk.yellow(codeLine);
         }
     }
 
@@ -472,6 +526,17 @@ export class MessageHandler {
         try {
             const systemDetector = this.callbacks.getSystemDetector();
             const tools = await systemDetector.getAllToolDefinitions();
+            
+            // 调试信息：显示加载的工具
+            // if (tools.length > 0) {
+            //     const messages = languageService.getMessages();
+            //     console.log(chalk.gray(`🐛 🛠️ 已加载 ${tools.length} 个MCP工具: ${tools.map(t => t.function.name).join(', ')}`));
+            //     // 显示第一个工具的详细信息
+            //     if (tools[0]) {
+            //         console.log(chalk.gray(`🐛 第一个工具详情: ${JSON.stringify(tools[0], null, 2)}`));
+            //     }
+            // }
+            
             return tools;
         } catch (error) {
             console.warn('Failed to get MCP tools:', error);
@@ -489,19 +554,77 @@ export class MessageHandler {
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
             console.log(chalk.cyan(messages.main.messages.toolCall.calling.replace('{name}', functionName)));
-            // console.log(chalk.gray(`参数: ${JSON.stringify(parameters, null, 2)}`));
+            console.log(chalk.gray(`🐛参数: ${JSON.stringify(parameters, null, 2)}`));
+
+            // 将工具调用记录添加到历史记录
+            const toolCallMessage: Message = {
+                type: 'ai',
+                content: `🛠️ **Tool Call: ${functionName}**\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(parameters, null, 2)}\n\`\`\``,
+                timestamp: new Date()
+            };
+            this.callbacks.addMessage(toolCallMessage);
 
             const systemDetector = this.callbacks.getSystemDetector();
             const result = await systemDetector.executeMcpTool(functionName, parameters);
 
             console.log(chalk.green(messages.main.messages.toolCall.success));
-            // console.log(chalk.gray(`结果: ${JSON.stringify(result, null, 2)}`));
+            //console.log(chalk.gray(`🐛结果: ${JSON.stringify(result, null, 2)}`));
+
+            // 将工具调用结果添加到历史记录
+            let resultContent = '';
+            if (result && typeof result === 'object') {
+                // 如果结果是文件内容或目录结构，格式化显示
+                if (result.content) {
+                    resultContent = `✅ **Tool Result: ${functionName}**\n\n`;
+                    if (result.structure) {
+                        // 目录结构结果
+                        resultContent += result.structure;
+                    } else {
+                        // 文件内容结果
+                        resultContent += `**File:** ${parameters.path || 'Unknown'}\n`;
+                        if (result.totalLines) {
+                            resultContent += `**Lines:** ${result.lineRange?.start || 1}-${result.lineRange?.end || result.totalLines} of ${result.totalLines}\n`;
+                        }
+                        if (result.tokenCount) {
+                            resultContent += `**Tokens:** ${result.tokenCount}\n`;
+                        }
+                        if (result.isPartial) {
+                            resultContent += `**Status:** Partial content (truncated due to token limit)\n`;
+                        }
+                        if (result.message) {
+                            resultContent += `**Message:** ${result.message}\n`;
+                        }
+                        resultContent += `\n**Content:**\n\`\`\`\n${result.content}\n\`\`\``;
+                    }
+                } else {
+                    // 其他类型的结果
+                    resultContent = `✅ **Tool Result: ${functionName}**\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``;
+                }
+            } else {
+                resultContent = `✅ **Tool Result: ${functionName}**\n\n${String(result)}`;
+            }
+
+            const toolResultMessage: Message = {
+                type: 'ai',
+                content: resultContent,
+                timestamp: new Date()
+            };
+            this.callbacks.addMessage(toolResultMessage);
 
             return result;
         } catch (error) {
             const messages = languageService.getMessages();
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
             console.log(chalk.red(messages.main.messages.toolCall.failed.replace('{error}', errorMsg)));
+
+            // 将工具调用错误也添加到历史记录
+            const errorMessage: Message = {
+                type: 'ai',
+                content: `❌ **Tool Error: ${toolCall.function?.name || 'Unknown'}**\n\n**Error:** ${errorMsg}\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(JSON.parse(toolCall.function?.arguments || '{}'), null, 2)}\n\`\`\``,
+                timestamp: new Date()
+            };
+            this.callbacks.addMessage(errorMessage);
+
             throw error;
         }
     }

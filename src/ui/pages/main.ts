@@ -387,9 +387,10 @@ export class MainPage {
         const linesToGoUp = currentState.suggestions.length + (hasTitle ? 1 : 0);
         process.stdout.write(`\x1B[${linesToGoUp}A`);
 
-        // 重新计算光标位置
-        const promptLength = this.currentMessages.main.prompt.length;
-        process.stdout.write(`\x1B[${promptLength + currentInput.length + 1}G`);
+        // 重新计算光标位置，使用显示宽度而不是字符长度
+        const promptLength = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
+        const inputWidth = StringUtils.getDisplayWidth(currentInput);
+        process.stdout.write(`\x1B[${promptLength + inputWidth + 1}G`);
       };
 
       // 更新显示

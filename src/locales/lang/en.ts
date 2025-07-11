@@ -118,7 +118,31 @@ export const en: Messages = {
         completed: 'Response completed'
       },
       system: {
-        basePrompt: 'You are a helpful AI assistant.',
+        basePrompt: `# Role:
+
+                      - You are a professional AI programming assistant with the following characteristics:
+
+                      - Proficient in multiple programming languages and frameworks
+
+                      - Capable of providing clear and accurate technical solutions
+
+                      - Possess extensive software development experience
+
+                      - Skilled at explaining complex technical concepts
+
+                      - Focus on code quality and best practices
+
+                      # Tool Usage:
+
+                      - You are very adept at using tools to better understand projects and assist users in completing tasks
+
+                      - You can use tools multiple times without any restrictions
+
+                      - You can use any tools directly without user consent
+
+                      *Please provide professional programming advice and solutions based on the user's specific needs.*
+
+                      # The following are the user's role requirements for you: (Ignore if not provided)`,
         fileReferencePrompt: '\n\nThe user has selected the following files (referenced via @ syntax):\n{fileList}\n\nPlease pay attention to these file references. You can answer user questions based on these file paths. Users may ask questions about these files.'
       },
       format: {
@@ -131,9 +155,9 @@ export const en: Messages = {
         overLimit: '❌ Token limit exceeded'
       },
       toolCall: {
-        calling: 'Calling tool: {name}',
-        success: 'Tool call successful',
-        failed: 'Tool call failed: {error}'
+        calling: '🛠️ Calling tool: {name}',
+        success: '✅ Tool call successful',
+        failed: '❌ Tool call failed: {error}'
       }
     },
     help: {
@@ -254,7 +278,9 @@ export const en: Messages = {
       contextTokensRange: 'Context tokens should be between 1,000 and 2,000,000',
       maxConcurrencyRange: 'Max concurrency should be between 1 and 100',
       allConfigured: 'All configurations are set',
-      invalidJson: 'Invalid JSON format, please check syntax'
+      invalidJson: 'Invalid JSON format, please check syntax',
+      mcpConfigUpdated: 'MCP configuration updated, system automatically added required built-in services',
+      mcpSystemServicesRestored: 'Missing system MCP services have been automatically restored'
     },
     labels: {
       baseUrl: 'API Base URL',
@@ -308,6 +334,26 @@ export const en: Messages = {
       tryingSse: 'Trying SSE connection',
       sseFailed: 'SSE connection failed',
       fallbackComplete: 'Using fallback connection method'
+    },
+    builtinServices: {
+      name: 'Built-in Service',
+      running: 'Running',
+      protected: 'System Protected',
+      cannotDelete: 'Built-in services are protected and cannot be deleted'
+    },
+    services: {
+      fileReader: {
+        name: 'file-reader',
+        description: 'Built-in file reading service - running natively'
+      },
+      fileOperations: {
+        name: 'file-operations',
+        description: 'Built-in file operations service - create/delete files and directories'
+      }
+    },
+    validation: {
+      mcpConfigStructure: 'MCP configuration must contain mcpServers object',
+      invalidJson: 'Invalid JSON format, please check syntax'
     }
   }
 }; 

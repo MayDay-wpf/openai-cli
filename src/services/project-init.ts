@@ -15,6 +15,7 @@ export class ProjectInitService {
   private fileSearchManager: FileSearchManager;
   private projectRoot: string;
   private storageService: StorageService;
+  private gitignorePatterns: string[] = [];
 
   constructor(projectRoot?: string) {
     this.projectRoot = projectRoot || process.cwd();
@@ -30,6 +31,9 @@ export class ProjectInitService {
     const finalOutputPath = outputPath || path.join(this.projectRoot, 'sawyou.md');
 
     try {
+      // 每次生成文档时重新解析 .gitignore 文件
+      this.parseGitignore();
+
       // 步骤1: 扫描项目文件
       onStepStart?.('scanning');
       if (checkInterrupt?.()) throw new Error('Interrupted');
@@ -302,7 +306,7 @@ ${fileList}`
     } = {}
   ): Promise<string[]> {
     const { checkInterrupt, onProgress } = options;
-    // 处理所有有内容的文件，不做主观筛选
+    // 处理所有有内容的文件
     const filesToAnalyze = files.filter(f => f.content && f.content.trim().length > 0);
     const totalFiles = filesToAnalyze.length;
 
@@ -459,6 +463,11 @@ ${fileSummaries.join('\n\n')}
       return true;
     }
 
+    // 首先检查 .gitignore 规则
+    if (this.isIgnoredByGitignore(relativePath, isDirectory)) {
+      return true;
+    }
+
     // 基本的ignore规则
     const ignoredPatterns = [
       'node_modules', '.git', '.DS_Store', 'dist', 'build', 'coverage',
@@ -576,5 +585,106 @@ ${fileSummaries.join('\n\n')}
     const targetLength = Math.floor(content.length * ratio * 0.9); // 保守一点
 
     return content.substring(0, targetLength) + '\n\n... 内容被截断 ...';
+  }
+
+  /**
+   * 解析 .gitignore 文件
+   */
+  private parseGitignore(): void {
+    const gitignorePath = path.join(this.projectRoot, '.gitignore');
+    if (fs.existsSync(gitignorePath)) {
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      const lines = content.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+      this.gitignorePatterns = lines;
+    }
+  }
+
+  /**
+   * 检查文件是否被 .gitignore 忽略
+   */
+  private isIgnoredByGitignore(relativePath: string, isDirectory: boolean): boolean {
+    // 规范化路径，使用正斜杠
+    const normalizedPath = relativePath.replace(/\\/g, '/');
+    
+    for (const pattern of this.gitignorePatterns) {
+      if (this.matchesGitignorePattern(normalizedPath, pattern, isDirectory)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * 匹配 gitignore 模式
+   */
+  private matchesGitignorePattern(filePath: string, pattern: string, isDirectory: boolean): boolean {
+    // 移除前导和尾随空格
+    pattern = pattern.trim();
+    if (!pattern) return false;
+
+    // 处理否定模式（以 ! 开头的模式不会被忽略）
+    if (pattern.startsWith('!')) {
+      return false; // 简化处理，否定模式暂不支持
+    }
+
+    // 处理目录模式（以 / 结尾）
+    if (pattern.endsWith('/')) {
+      pattern = pattern.slice(0, -1);
+      if (!isDirectory) return false; // 只匹配目录
+    }
+
+    // 处理根路径模式（以 / 开头）
+    if (pattern.startsWith('/')) {
+      pattern = pattern.slice(1);
+      return this.matchesGlobPattern(filePath, pattern);
+    }
+
+    // 检查是否匹配文件名或路径的任何部分
+    const pathParts = filePath.split('/');
+    
+    // 直接匹配整个路径
+    if (this.matchesGlobPattern(filePath, pattern)) {
+      return true;
+    }
+
+    // 匹配路径中的任何部分
+    for (let i = 0; i < pathParts.length; i++) {
+      const subPath = pathParts.slice(i).join('/');
+      if (this.matchesGlobPattern(subPath, pattern)) {
+        return true;
+      }
+    }
+
+    // 匹配文件名
+    const fileName = pathParts[pathParts.length - 1];
+    if (this.matchesGlobPattern(fileName, pattern)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * 匹配 glob 模式
+   */
+  private matchesGlobPattern(text: string, pattern: string): boolean {
+    // 转换 glob 模式为正则表达式
+    let regexPattern = pattern
+      .replace(/\./g, '\\.')          // 转义点号
+      .replace(/\*\*/g, '.*')         // ** 匹配任何字符包括 / (必须在 * 之前处理)
+      .replace(/\*/g, '[^/]*')        // * 匹配除 / 之外的任何字符
+      .replace(/\?/g, '[^/]');        // ? 匹配除 / 之外的单个字符
+
+    // 确保完全匹配
+    regexPattern = '^' + regexPattern + '$';
+    
+    try {
+      const regex = new RegExp(regexPattern);
+      return regex.test(text);
+    } catch (error) {
+      // 如果正则表达式无效，回退到简单的字符串匹配
+      return text === pattern;
+    }
   }
 } 

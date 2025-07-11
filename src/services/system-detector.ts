@@ -4,17 +4,19 @@ import { MCPClient } from 'mcp-client';
 import { AnimationUtils } from '../utils';
 import { languageService } from './language';
 import { StorageService } from './storage';
+import { GlobalMCPManager } from '../mcp/manager';
 
 export interface McpServerInfo {
     name: string;
-    type: 'http' | 'stdio' | 'sse' | 'other' | 'unknown';
+    type: 'http' | 'stdio' | 'sse' | 'builtin' | 'other' | 'unknown';
     status: 'connected' | 'failed' | 'not_found' | 'pending';
     url?: string;
     command?: string;
     args?: string[];
     tools?: string[];
     error?: string;
-    actualTransport?: 'http' | 'sse' | 'stdio'; // 实际使用的传输方式
+    actualTransport?: 'http' | 'sse' | 'stdio' | 'builtin'; // 实际使用的传输方式
+    isBuiltIn?: boolean; // 标记是否为内置服务
 }
 
 export interface SystemDetectionResult {
@@ -26,6 +28,11 @@ export interface SystemDetectionResult {
 
 export class SystemDetector {
     private mcpClients: Map<string, MCPClient> = new Map();
+    private globalMCPManager: GlobalMCPManager;
+
+    constructor() {
+        this.globalMCPManager = GlobalMCPManager.getInstance();
+    }
 
     async detectSystem(): Promise<SystemDetectionResult> {
         const messages = languageService.getMessages().systemDetector;
@@ -143,11 +150,17 @@ export class SystemDetector {
             const statusColor = this.getStatusColor(server.status);
 
             content += `${statusIcon} ${chalk.white.bold(server.name)}\n`;
-            content += `   ${chalk.gray('Type:')} ${chalk.white(server.type.toUpperCase())}`;
-
-            // 如果实际传输方式与配置不同，显示回退信息
-            if (server.actualTransport && server.actualTransport !== server.type) {
-                content += chalk.gray(` → ${server.actualTransport.toUpperCase()}`);
+            
+            // 显示服务类型，内置服务特殊处理
+            if (server.isBuiltIn) {
+                content += `   ${chalk.gray('Type:')} ${chalk.green('BUILTIN')} ${chalk.gray(`(${messages.builtinServices.protected})`)}`;
+            } else {
+                content += `   ${chalk.gray('Type:')} ${chalk.white(server.type.toUpperCase())}`;
+                
+                // 如果实际传输方式与配置不同，显示回退信息
+                if (server.actualTransport && server.actualTransport !== server.type) {
+                    content += chalk.gray(` → ${server.actualTransport.toUpperCase()}`);
+                }
             }
             content += '\n';
 
@@ -204,25 +217,64 @@ export class SystemDetector {
                 status: 'pending'
             };
 
-            if (config.url) {
-                serverInfo.url = config.url;
-            } else if (config.command) {
-                serverInfo.command = config.command;
-                serverInfo.args = config.args || [];
-            }
+            // 检查是否为内置服务
+            if (config.transport === 'builtin') {
+                serverInfo.isBuiltIn = true;
+                serverInfo.actualTransport = 'builtin';
+                
+                // 直接连接内置服务
+                try {
+                    await this.connectToBuiltInServer(serverInfo);
+                    servers.push(serverInfo);
+                } catch (error) {
+                    serverInfo.status = 'failed';
+                    serverInfo.error = error instanceof Error ? error.message : 'Built-in service error';
+                    servers.push(serverInfo);
+                }
+            } else {
+                // 外部服务
+                if (config.url) {
+                    serverInfo.url = config.url;
+                } else if (config.command) {
+                    serverInfo.command = config.command;
+                    serverInfo.args = config.args || [];
+                }
 
-            // 尝试连接MCP服务器
-            try {
-                await this.connectToMcpServer(serverInfo);
-                servers.push(serverInfo);
-            } catch (error) {
-                serverInfo.status = 'failed';
-                serverInfo.error = error instanceof Error ? error.message : 'Unknown error';
-                servers.push(serverInfo);
+                // 尝试连接外部MCP服务器
+                try {
+                    await this.connectToMcpServer(serverInfo);
+                    servers.push(serverInfo);
+                } catch (error) {
+                    serverInfo.status = 'failed';
+                    serverInfo.error = error instanceof Error ? error.message : 'Unknown error';
+                    servers.push(serverInfo);
+                }
             }
         }
 
         return servers;
+    }
+
+    private async connectToBuiltInServer(serverInfo: McpServerInfo): Promise<void> {
+        try {
+            // 检查全局MCP管理器是否已初始化
+            if (!this.globalMCPManager.isReady()) {
+                throw new Error('Built-in MCP manager not initialized');
+            }
+
+            // 验证内置服务存在
+            const servicesInfo = this.globalMCPManager.getServicesInfo();
+            const serviceExists = servicesInfo.some(service => service.serviceName === serverInfo.name);
+            
+            if (!serviceExists) {
+                throw new Error(`Built-in service '${serverInfo.name}' not found`);
+            }
+
+            serverInfo.status = 'connected';
+        } catch (error) {
+            serverInfo.status = 'failed';
+            serverInfo.error = error instanceof Error ? error.message : 'Connection to built-in service failed';
+        }
     }
 
     private async fetchToolsForServers(servers: McpServerInfo[]): Promise<void> {
@@ -230,10 +282,17 @@ export class SystemDetector {
 
         for (const server of connectedServers) {
             try {
-                const client = this.mcpClients.get(server.name);
-                if (client) {
-                    const tools = await client.getAllTools();
+                if (server.isBuiltIn) {
+                    // 内置服务，使用全局MCP管理器获取工具
+                    const tools = this.globalMCPManager.getServiceTools(server.name);
                     server.tools = tools.map(tool => tool.name);
+                } else {
+                    // 外部服务，使用MCP客户端获取工具
+                    const client = this.mcpClients.get(server.name);
+                    if (client) {
+                        const tools = await client.getAllTools();
+                        server.tools = tools.map(tool => tool.name);
+                    }
                 }
             } catch (error) {
                 // 获取工具失败不影响连接状态，但记录错误
@@ -242,8 +301,10 @@ export class SystemDetector {
         }
     }
 
-    private detectServerType(config: any): 'http' | 'stdio' | 'sse' | 'other' | 'unknown' {
-        if (config.url) {
+    private detectServerType(config: any): 'http' | 'stdio' | 'sse' | 'builtin' | 'other' | 'unknown' {
+        if (config.transport === 'builtin') {
+            return 'builtin';
+        } else if (config.url) {
             // 根据URL判断是HTTP还是SSE
             if (config.type === 'sse' || config.url.includes('/sse')) {
                 return 'sse';
@@ -437,6 +498,56 @@ export class SystemDetector {
     async getAllToolDefinitions(): Promise<any[]> {
         const toolDefinitions: any[] = [];
 
+        // 1. 获取内置服务的工具
+        try {
+            if (this.globalMCPManager.isReady()) {
+                const servicesInfo = this.globalMCPManager.getServicesInfo();
+                
+                for (const serviceInfo of servicesInfo) {
+                    try {
+                        const tools = this.globalMCPManager.getServiceTools(serviceInfo.serviceName);
+                        
+                        // 将内置服务的工具转换为OpenAI格式
+                        for (const tool of tools) {
+                            const openAITool = this.convertMcpToolToOpenAI(tool, serviceInfo.serviceName);
+                            if (openAITool) {
+                                toolDefinitions.push(openAITool);
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to get tools from built-in service ${serviceInfo.serviceName}:`, error);
+                    }
+                }
+            } else {
+                // Attempt to initialize if not ready
+                try {
+                    await this.globalMCPManager.initialize();
+                    // Retry getting services after initialization
+                    const servicesInfo = this.globalMCPManager.getServicesInfo();
+                    for (const serviceInfo of servicesInfo) {
+                        try {
+                            const tools = this.globalMCPManager.getServiceTools(serviceInfo.serviceName);
+                            
+                            // 将内置服务的工具转换为OpenAI格式
+                            for (const tool of tools) {
+                                const openAITool = this.convertMcpToolToOpenAI(tool, serviceInfo.serviceName);
+                                if (openAITool) {
+                                    toolDefinitions.push(openAITool);
+                                }
+                            }
+                        } catch (error) {
+                            console.warn(`Failed to get tools from built-in service ${serviceInfo.serviceName}:`, error);
+                        }
+                    }
+                } catch (initError) {
+                    console.warn(`Failed to initialize GlobalMCPManager:`, initError);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to get built-in MCP tools:', error);
+        }
+
+        // 2. 获取外部服务的工具
         for (const [serverName, client] of this.mcpClients.entries()) {
             try {
                 // 获取服务器的工具列表
@@ -503,20 +614,46 @@ export class SystemDetector {
         const serverName = parts[0];
         const actualToolName = parts.slice(1).join('_');
 
-        const client = this.mcpClients.get(serverName);
-        if (!client) {
-            throw new Error(`MCP client not found for server: ${serverName}`);
-        }
+        // 检查是否为内置服务
+        const servicesInfo = this.globalMCPManager.getServicesInfo();
+        const isBuiltInService = servicesInfo.some(service => service.serviceName === serverName);
 
-        try {
-            // 调用MCP工具
-            const result = await client.callTool({
-                name: actualToolName,
-                arguments: parameters
-            });
-            return result;
-        } catch (error) {
-            throw new Error(`Failed to execute MCP tool ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        if (isBuiltInService) {
+            // 内置服务，使用全局MCP管理器
+            try {
+                const request = {
+                    id: `tool-call-${Date.now()}`,
+                    method: actualToolName,
+                    params: parameters
+                };
+                
+                const response = await this.globalMCPManager.handleRequest(serverName, request);
+                
+                if (response.error) {
+                    throw new Error(response.error.message);
+                }
+                
+                return response.result;
+            } catch (error) {
+                throw new Error(`Failed to execute built-in MCP tool ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+        } else {
+            // 外部服务，使用MCP客户端
+            const client = this.mcpClients.get(serverName);
+            if (!client) {
+                throw new Error(`MCP client not found for server: ${serverName}`);
+            }
+
+            try {
+                // 调用MCP工具
+                const result = await client.callTool({
+                    name: actualToolName,
+                    arguments: parameters
+                });
+                return result;
+            } catch (error) {
+                throw new Error(`Failed to execute external MCP tool ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
         }
     }
 

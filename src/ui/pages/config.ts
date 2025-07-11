@@ -452,13 +452,13 @@ export class ConfigPage {
             return messages.config.messages.invalidInput;
           }
 
-          // 验证JSON格式
-          try {
-            JSON.parse(input.trim());
-            return true;
-          } catch {
-            return messages.config.messages.invalidJson;
+          // 使用新的验证方法
+          const validation = StorageService.validateMcpConfigJson(input.trim());
+          if (!validation.isValid) {
+            return validation.error || messages.config.messages.invalidJson;
           }
+
+          return true;
         }
       });
 
@@ -467,8 +467,23 @@ export class ConfigPage {
 
       if (mcpConfigJson && mcpConfigJson.trim()) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
-        StorageService.saveMcpConfigFromJson(mcpConfigJson.trim());
-        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+        
+        // 验证并保存配置
+        const validation = StorageService.validateMcpConfigJson(mcpConfigJson.trim());
+        if (validation.isValid && validation.parsedConfig) {
+          StorageService.saveMcpConfig(validation.parsedConfig);
+          
+          // 显示保存成功消息
+          console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+          
+          // 如果有系统服务被恢复，显示额外信息
+          if (validation.hasSystemUpdates && validation.restoredServices && validation.restoredServices.length > 0) {
+            console.log('  ' + chalk.yellow('ℹ ' + messages.config.messages.mcpSystemServicesRestored));
+            validation.restoredServices.forEach(serviceName => {
+              console.log('    ' + chalk.gray(`- ${serviceName} (${messages.systemDetector.builtinServices.protected})`));
+            });
+          }
+        }
       }
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
@@ -609,25 +624,38 @@ export class ConfigPage {
 
   private displayMcpConfigItem(label: string, mcpConfig: McpConfig, status: string): void {
     const statusColor = chalk.green;
-
+    const messages = languageService.getMessages();
     console.log('  ' + chalk.white.bold(label + ':'));
     console.log('    ' + chalk.gray('Servers: '));
 
     // 显示每个MCP服务器的详细信息
     Object.entries(mcpConfig.mcpServers).forEach(([serverName, serverConfig]) => {
-      console.log('      ' + chalk.cyan('●') + ' ' + chalk.white.bold(serverName));
+      // 判断是否为系统自带服务
+      const isBuiltIn = serverConfig.transport === 'builtin' || 
+                       (serverName === 'file-reader' && serverConfig.description?.includes(messages.systemDetector.builtinServices.name));
+      const serverIcon = isBuiltIn ? chalk.green('●') : chalk.cyan('●');
+      const serverLabel = isBuiltIn ? chalk.white.bold(serverName) + chalk.gray(' (' + messages.systemDetector.builtinServices.name + ')') : chalk.white.bold(serverName);
+      
+      console.log('      ' + serverIcon + ' ' + serverLabel);
 
       // 智能检测服务器类型并显示相应信息
-      if (serverConfig.url) {
+      if (serverConfig.transport === 'builtin') {
+        // 内置服务
+        console.log('        ' + chalk.gray('Type: ') + chalk.green('BUILTIN'));
+        console.log('        ' + chalk.gray('Status: ') + chalk.green(messages.systemDetector.builtinServices.running));
+      } else if (serverConfig.url) {
         // HTTP/HTTPS类型的服务器
         console.log('        ' + chalk.gray('Type: ') + chalk.white('HTTP'));
         console.log('        ' + chalk.gray('URL: ') + chalk.white(serverConfig.url));
       } else if (serverConfig.command) {
         // STDIO类型的服务器
         console.log('        ' + chalk.gray('Type: ') + chalk.white('STDIO'));
-        console.log('        ' + chalk.gray('Command: ') + chalk.white(serverConfig.command));
-        if (serverConfig.args && Array.isArray(serverConfig.args)) {
-          console.log('        ' + chalk.gray('Args: ') + chalk.white(serverConfig.args.join(' ')));
+        if (!isBuiltIn) {
+          // 只有非系统服务才显示详细的command和args
+          console.log('        ' + chalk.gray('Command: ') + chalk.white(serverConfig.command));
+          if (serverConfig.args && Array.isArray(serverConfig.args)) {
+            console.log('        ' + chalk.gray('Args: ') + chalk.white(serverConfig.args.join(' ')));
+          }
         }
       } else if (serverConfig.transport) {
         // 其他传输类型
@@ -637,11 +665,17 @@ export class ConfigPage {
         console.log('        ' + chalk.gray('Type: ') + chalk.yellow('Unknown'));
       }
 
+      // 显示描述信息
+      if (serverConfig.description) {
+        console.log('        ' + chalk.gray('Description: ') + chalk.white(serverConfig.description));
+      }
+
       // 显示其他配置信息（排除已经显示的主要字段）
-      const excludeKeys = ['url', 'command', 'args', 'transport'];
+      const excludeKeys = ['url', 'command', 'args', 'transport', 'description'];
       const extraConfig = Object.entries(serverConfig).filter(([key]) => !excludeKeys.includes(key));
 
-      if (extraConfig.length > 0) {
+      if (extraConfig.length > 0 && !isBuiltIn) {
+        // 系统自带服务不显示复杂的配置细节
         extraConfig.forEach(([key, value]) => {
           let displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
           // 如果是token类似的敏感信息，进行部分隐藏

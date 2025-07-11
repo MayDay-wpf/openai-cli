@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Language } from '../types/language';
+import { languageService } from './language';
 
 export interface ApiConfig {
   baseUrl?: string;
@@ -13,7 +14,10 @@ export interface ApiConfig {
 }
 
 export interface McpServer {
-  url: string;
+  url?: string;
+  command?: string;
+  args?: string[];
+  transport?: string;
   [key: string]: any; // 允许额外的配置项
 }
 
@@ -156,7 +160,46 @@ export class StorageService {
    */
   static getMcpConfig(): McpConfig {
     const config = StorageService.readConfig();
-    return config.mcpConfig || { mcpServers: {} };
+    let mcpConfig = config.mcpConfig || { mcpServers: {} };
+    
+    // 确保系统自带的MCP服务存在，如果有更新则保存
+    const originalJson = JSON.stringify(mcpConfig);
+    mcpConfig = StorageService.ensureBuiltInMcpServices(mcpConfig);
+    const updatedJson = JSON.stringify(mcpConfig);
+    
+    // 如果配置有变化，立即保存
+    if (originalJson !== updatedJson) {
+      config.mcpConfig = mcpConfig;
+      StorageService.writeConfig(config);
+    }
+    
+    return mcpConfig;
+  }
+
+  /**
+   * 确保系统自带的MCP服务存在
+   */
+  private static ensureBuiltInMcpServices(mcpConfig: McpConfig): McpConfig {
+    const messages = languageService.getMessages();
+    const builtInServices = StorageService.getBuiltInMcpServices();
+    
+    // 检查所有内置服务
+    for (const [serviceName, serviceConfig] of Object.entries(builtInServices)) {
+      const existingConfig = mcpConfig.mcpServers[serviceName];
+      
+      if (!existingConfig) {
+        // 没有配置，添加新的内置服务配置
+        mcpConfig.mcpServers[serviceName] = { ...serviceConfig };
+      } else if (existingConfig.command === 'openai-cli-mcp' || 
+                 existingConfig.transport === 'stdio' ||
+                 existingConfig.description?.includes('系统自带') ||
+                 existingConfig.description?.includes('Built-in')) {
+        // 存在旧配置，更新为内置服务配置
+        mcpConfig.mcpServers[serviceName] = { ...serviceConfig };
+      }
+    }
+    
+    return mcpConfig;
   }
 
   /**
@@ -164,6 +207,8 @@ export class StorageService {
    */
   static saveMcpConfig(mcpConfig: McpConfig): void {
     const config = StorageService.readConfig();
+    // 确保保存时也包含系统自带的服务
+    mcpConfig = StorageService.ensureBuiltInMcpServices(mcpConfig);
     config.mcpConfig = mcpConfig;
     StorageService.writeConfig(config);
   }
@@ -253,5 +298,117 @@ export class StorageService {
       isValid: missing.length === 0,
       missing
     };
+  }
+
+  /**
+   * 强制更新MCP配置（修复旧配置）
+   */
+  static updateMcpConfig(): void {
+    const config = StorageService.readConfig();
+    let mcpConfig = config.mcpConfig || { mcpServers: {} };
+    
+    // 强制重新检查和更新内置服务配置
+    mcpConfig = StorageService.ensureBuiltInMcpServices(mcpConfig);
+    
+    // 保存更新后的配置
+    config.mcpConfig = mcpConfig;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 获取系统内置MCP服务列表
+   */
+  static getBuiltInMcpServices(): Record<string, McpServer> {
+    const messages = languageService.getMessages();
+    return {
+      'file-reader': {
+        transport: 'builtin',
+        description: messages.systemDetector.services.fileReader.description
+      },
+      'file-operations': {
+        transport: 'builtin',
+        description: messages.systemDetector.services.fileOperations.description
+      }
+    };
+  }
+
+  /**
+   * 检查并恢复缺失的系统MCP服务
+   * @param userMcpConfig 用户编辑的MCP配置
+   * @returns 包含系统服务的完整配置和是否有更新
+   */
+  static validateAndRestoreSystemMcpServices(userMcpConfig: McpConfig): { 
+    config: McpConfig; 
+    hasUpdates: boolean; 
+    restoredServices: string[] 
+  } {
+    const builtInServices = StorageService.getBuiltInMcpServices();
+    const restoredServices: string[] = [];
+    let hasUpdates = false;
+
+    // 检查每个系统服务是否存在
+    for (const [serviceName, serviceConfig] of Object.entries(builtInServices)) {
+      const userService = userMcpConfig.mcpServers[serviceName];
+      
+      if (!userService) {
+        // 系统服务不存在，添加它
+        userMcpConfig.mcpServers[serviceName] = { ...serviceConfig };
+        restoredServices.push(serviceName);
+        hasUpdates = true;
+      } else if (userService.transport !== 'builtin') {
+        // 系统服务存在但配置不正确，修复它
+        userMcpConfig.mcpServers[serviceName] = { ...serviceConfig };
+        restoredServices.push(serviceName);
+        hasUpdates = true;
+      }
+    }
+
+    return {
+      config: userMcpConfig,
+      hasUpdates,
+      restoredServices
+    };
+  }
+
+  /**
+   * 检查MCP配置中是否包含受保护的系统服务
+   * @param mcpConfigJson 用户提供的JSON字符串
+   * @returns 验证结果
+   */
+  static validateMcpConfigJson(mcpConfigJson: string): {
+    isValid: boolean;
+    error?: string;
+    parsedConfig?: McpConfig;
+    hasSystemUpdates?: boolean;
+    restoredServices?: string[];
+  } {
+    try {
+      const parsedConfig = JSON.parse(mcpConfigJson) as McpConfig;
+      
+      // 验证基本结构
+      if (!parsedConfig.mcpServers || typeof parsedConfig.mcpServers !== 'object') {
+        const messages = languageService.getMessages();
+        return {
+          isValid: false,
+          error: messages.systemDetector.validation.mcpConfigStructure
+        };
+      }
+
+      // 检查并恢复系统服务
+      const validation = StorageService.validateAndRestoreSystemMcpServices(parsedConfig);
+      
+      return {
+        isValid: true,
+        parsedConfig: validation.config,
+        hasSystemUpdates: validation.hasUpdates,
+        restoredServices: validation.restoredServices
+      };
+    } catch (error) {
+      const messages = languageService.getMessages();
+      return {
+        isValid: false,
+        error: messages.systemDetector.validation.invalidJson
+      };
+    }
   }
 } 

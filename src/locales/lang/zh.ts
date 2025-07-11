@@ -118,7 +118,21 @@ export const zh: Messages = {
         completed: '回复完成'
       },
       system: {
-        basePrompt: '你是一个有用的AI助手。',
+        basePrompt: `# 角色:
+                      - 你是一个专业的AI编程助手，具有以下特点：
+                      - 熟练掌握多种编程语言和框架
+                      - 能够提供清晰、准确的技术解决方案
+                      - 具有丰富的软件开发经验
+                      - 善于解释复杂的技术概念
+                      - 注重代码质量和最佳实践
+                    # 工具使用:
+                      - 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作
+                      - 你可以多次使用工具，且无任何限制
+                      - 使用任何工具不需要用户同意，你可以直接使用
+
+                    *请根据用户的具体需求提供专业的编程建议和解决方案。*
+
+                    # 下面是用户对你的角色要求:（如果没有请忽略）`,
         fileReferencePrompt: '\n\n用户选中了以下文件（通过@语法引用）：\n{fileList}\n\n请注意这些文件引用，你可以基于这些文件路径来回答用户的问题。用户可能会询问关于这些文件的问题。'
       },
       format: {
@@ -131,9 +145,9 @@ export const zh: Messages = {
         overLimit: '❌ Token超出限制'
       },
       toolCall: {
-        calling: '调用工具: {name}',
-        success: '工具调用成功',
-        failed: '工具调用失败: {error}'
+        calling: '🛠️ 调用工具: {name}',
+        success: '✅ 工具调用成功',
+        failed: '❌ 工具调用失败: {error}'
       }
     },
     help: {
@@ -254,7 +268,9 @@ export const zh: Messages = {
       contextTokensRange: '上下文Token数量应在 1,000 到 2,000,000 之间',
       maxConcurrencyRange: '最大并发数应在 1 到 100 之间',
       allConfigured: '所有配置项已设置完成',
-      invalidJson: '无效的JSON格式，请检查语法'
+      invalidJson: '无效的JSON格式，请检查语法',
+      mcpConfigUpdated: 'MCP配置已更新，系统自动添加了必需的内置服务',
+      mcpSystemServicesRestored: '已自动恢复缺失的系统MCP服务'
     },
     labels: {
       baseUrl: 'API 基础地址',
@@ -308,6 +324,26 @@ export const zh: Messages = {
       tryingSse: '尝试SSE连接',
       sseFailed: 'SSE连接失败',
       fallbackComplete: '使用备用连接方式'
+    },
+    builtinServices: {
+      name: '内置服务',
+      running: '运行中',
+      protected: '系统保护',
+      cannotDelete: '内置服务受系统保护，无法删除'
+    },
+    services: {
+      fileReader: {
+        name: 'file-reader',
+        description: '系统自带的文件读取服务 - 内置运行'
+      },
+      fileOperations: {
+        name: 'file-operations',
+        description: '系统自带的文件操作服务 - 创建/删除文件和目录'
+      }
+    },
+    validation: {
+      mcpConfigStructure: 'MCP配置必须包含 mcpServers 对象',
+      invalidJson: '无效的JSON格式，请检查语法'
     }
   }
 }; 
