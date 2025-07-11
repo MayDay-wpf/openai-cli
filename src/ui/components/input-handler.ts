@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { Messages } from '../../types/language';
+import { isImageFile } from '../../utils/file-types';
 import { CommandManager } from './commands';
 import { FileSearchManager, FileSearchResult } from './files';
 
@@ -23,6 +24,8 @@ export class InputHandler {
   private fileSearchManager: FileSearchManager;
   private messages: Messages;
   private selectedFiles: Set<string> = new Set();
+  private selectedImageFiles: Set<string> = new Set();
+  private selectedTextFiles: Set<string> = new Set();
 
   constructor(
     commandManager: CommandManager,
@@ -166,8 +169,8 @@ export class InputHandler {
       if (lastAtIndex !== -1) {
         // 替换@后面的内容为选中的文件路径，并添加空格
         const newInput = currentInput.substring(0, lastAtIndex + 1) + suggestion.value + ' ';
-        // 添加到选中文件列表
-        this.selectedFiles.add(suggestion.value);
+        // 立即更新选中文件列表，确保同步
+        this.updateSelectedFiles(newInput);
         return newInput;
       }
     }
@@ -225,22 +228,48 @@ export class InputHandler {
     // 从输入中提取所有@文件引用
     const fileReferences = this.extractFileReferences(currentInput);
 
+    this.selectedImageFiles.clear();
+    this.selectedTextFiles.clear();
+
+    for (const file of fileReferences) {
+      if (isImageFile(file)) {
+        this.selectedImageFiles.add(file);
+      } else {
+        this.selectedTextFiles.add(file);
+      }
+    }
+
     // 更新选中文件列表，只保留仍在输入中的文件
     this.selectedFiles = new Set(fileReferences);
   }
 
   /**
+   * 强制同步输入文本和选中文件列表
+   * 当需要确保文件列表与当前输入完全同步时调用
+   */
+  syncSelectedFiles(currentInput: string): void {
+    this.updateSelectedFiles(currentInput);
+  }
+
+  /**
    * 从输入文本中提取文件引用
+   * 支持的格式：
+   * - "@文件路径 " - 文件路径后跟空格
+   * - "@文件路径" - 文件路径在字符串末尾
+   * - "@src/components/input-handler.ts 这是用户消息" - 文件路径后跟用户自定义消息
    */
   private extractFileReferences(input: string): string[] {
     const fileReferences: string[] = [];
-    // 匹配 @文件路径 模式，文件路径可以包含字母、数字、点、斜杠、连字符、下划线
-    const regex = /@([a-zA-Z0-9./\-_]+)(?=\s|$)/g;
+
+    // 使用正则表达式匹配 @ 后跟非空白字符，直到遇到空格或字符串结尾
+    // [^\s@]+ 匹配一个或多个非空白且非@字符（文件路径）
+    // (?=\s|$) 正向前瞻，确保后面是空格或字符串结尾
+    const spaceDelimitedRegex = /@([^\s@]+)(?=\s|$)/g;
     let match;
 
-    while ((match = regex.exec(input)) !== null) {
+    while ((match = spaceDelimitedRegex.exec(input)) !== null) {
       const filePath = match[1];
-      if (filePath.length > 0) {
+      if (filePath && filePath.length > 0) {
         fileReferences.push(filePath);
       }
     }
@@ -256,10 +285,26 @@ export class InputHandler {
   }
 
   /**
+   * 获取当前选中的图片文件列表
+   */
+  getSelectedImageFiles(): string[] {
+    return Array.from(this.selectedImageFiles);
+  }
+
+  /**
+   * 获取当前选中的文本文件列表
+   */
+  getSelectedTextFiles(): string[] {
+    return Array.from(this.selectedTextFiles);
+  }
+
+  /**
    * 清除选中文件列表
    */
   clearSelectedFiles(): void {
     this.selectedFiles.clear();
+    this.selectedImageFiles.clear();
+    this.selectedTextFiles.clear();
   }
 
   /**

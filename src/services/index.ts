@@ -1,3 +1,4 @@
+export { HistoryData, HistoryService } from './history';
 export { LanguageService } from './language';
 export { ChatMessage, OpenAIService, StreamOptions, openAIService } from './openai';
 export { ProjectInitService } from './project-init';

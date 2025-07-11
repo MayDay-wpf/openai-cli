@@ -3,7 +3,7 @@ import { Messages } from '../../types/language';
 export const en: Messages = {
   welcome: {
     starting: 'Initializing...',
-    tagline: 'Powered by AIBotPRO',
+    tagline: 'Powered by AIBotPRO https://aibotpro.cn',
     menuPrompt: 'Select action',
     menuOptions: {
       start: 'Start Application',
@@ -89,9 +89,21 @@ export const en: Messages = {
         name: '/history',
         description: 'View chat history'
       },
+      editHistory: {
+        name: '/edit-history',
+        description: 'Edit chat history records'
+      },
       init: {
         name: '/init',
         description: 'Initialize project documentation'
+      },
+      exportHistory: {
+        name: '/export-history',
+        description: 'Export chat history'
+      },
+      importHistory: {
+        name: '/import-history',
+        description: 'Import chat history'
       }
     },
     messages: {
@@ -118,32 +130,24 @@ export const en: Messages = {
         completed: 'Response completed'
       },
       system: {
-        basePrompt: `# Role:
-
-                      - You are a professional AI programming assistant with the following characteristics:
-
-                      - Proficient in multiple programming languages and frameworks
-
-                      - Capable of providing clear and accurate technical solutions
-
-                      - Possess extensive software development experience
-
-                      - Skilled at explaining complex technical concepts
-
-                      - Focus on code quality and best practices
-
-                      # Tool Usage:
-
-                      - You are very adept at using tools to better understand projects and assist users in completing tasks
-
-                      - You can use tools multiple times without any restrictions
-
-                      - You can use any tools directly without user consent
-
-                      *Please provide professional programming advice and solutions based on the user's specific needs.*
-
-                      # The following are the user's role requirements for you: (Ignore if not provided)`,
-        fileReferencePrompt: '\n\nThe user has selected the following files (referenced via @ syntax):\n{fileList}\n\nPlease pay attention to these file references. You can answer user questions based on these file paths. Users may ask questions about these files.'
+        basePrompt: '# Role:\n\n' +
+          '- You are a professional AI programming assistant with the following characteristics:\n\n' +
+          '- Proficient in multiple programming languages and frameworks\n\n' +
+          '- Capable of providing clear and accurate technical solutions\n\n' +
+          '- Possess extensive software development experience\n\n' +
+          '- Skilled at explaining complex technical concepts\n\n' +
+          '- Focus on code quality and best practices\n\n' +
+          '# Tool Usage:\n\n' +
+          '- You are very adept at using tools to better understand projects and assist users in completing tasks\n\n' +
+          '- You can use tools multiple times without any restrictions\n\n' +
+          '- You can use any tools directly without user consent\n\n' +
+          '- Especially, proactively use file operation tools (e.g., `list_dir`, `read_file`, `edit_file`) to explore projects, understand code, and directly help users solve problems.\n\n' +
+          '*Please provide professional programming advice and solutions based on the user\'s specific needs.*\n\n' +
+          '# The following are the user\'s role requirements for you: (Ignore if not provided)\n\n' +
+          '# Execution environment\n' +
+          '- Current working directory: {cwd}\n' +
+          '- Current time: {time}',
+        fileReferencePrompt: '\n\n# User-selected files\nThe user has selected the following files:\n{fileList}\n\nPlease pay attention to these file references. You can answer user questions based on these file paths. Users reference these files using @ syntax in their input, but here shows the pure file paths (without @ symbols).'
       },
       format: {
         timeLocale: 'en-US'
@@ -156,8 +160,15 @@ export const en: Messages = {
       },
       toolCall: {
         calling: '🛠️ Calling tool: {name}',
+        receiving: 'Receiving tool call...',
         success: '✅ Tool call successful',
-        failed: '❌ Tool call failed: {error}'
+        failed: '❌ Tool call failed: {error}',
+        handle: '⚠️ This function requires manual confirmation to execute',
+        rejected: '❌ User rejected to execute this function',
+        approved: '✅ User confirmed to execute this function',
+        confirm: 'Do you want to execute this function?',
+        confirmOptions: '[y]yes  [n]no  [Enter]default(yes)',
+        pleaseSelect: 'Please select: '
       }
     },
     help: {
@@ -178,7 +189,8 @@ export const en: Messages = {
       title: 'File Search',
       commands: 'Available Commands',
       file: 'File',
-      directory: 'Directory'
+      directory: 'Directory',
+      fileReadError: 'Error reading file: {filePath}'
     },
     responses: {
       understanding: 'I understand your question. Let me provide you with a detailed answer...',
@@ -217,6 +229,71 @@ export const en: Messages = {
       failed: 'Generation failed',
       interrupted: 'Generation interrupted',
       ctrlcToCancel: 'Press Ctrl+C to interrupt generation'
+    },
+    historyManagement: {
+      noHistory: 'No chat history found',
+      exportSuccess: 'History exported successfully',
+      exportFailed: 'Failed to export history',
+      importSuccess: 'History imported successfully',
+      importFailed: 'Failed to import history',
+      importConfirm: 'Are you sure you want to import history?',
+      importOverwrite: 'Existing history detected, do you want to overwrite it?',
+      importCancel: 'Import cancelled',
+      invalidFormat: 'Invalid file format',
+      fileNotFound: 'File not found',
+      fileSelectPrompt: 'Please enter file path',
+      exportingHistory: 'Exporting history...',
+      importingHistory: 'Importing history...',
+      confirmExit: 'Are you sure you want to exit?',
+      confirmExitPrompt: 'Chat history detected, do you want to export before exit?',
+      confirmExitOptions: '[y]Export and exit  [n]Exit directly  [c]Cancel',
+      exportBeforeExit: 'Export history',
+      exportBeforeExitPrompt: 'Please select action',
+      exportBeforeExitOptions: '[y]Export  [n]Skip  [c]Cancel',
+      defaultSavePath: 'Default save path',
+      enterDefaultPrompt: 'Press Enter to use default',
+      importInstructions: 'History import instructions:',
+      importStep1: '1. Type @ to start file search',
+      importStep2: '2. Select .json history file',
+      importStep3: '3. Or directly type @filepath (e.g., @chat-history.json)',
+      importExample: 'Example: @chat-history-2025-07-11T14-42-16.json',
+      jsonFileDetected: 'JSON file detected',
+      historyImportTip: 'Tip: If this is a history file, you can use /import-history command, then enter file path',
+      directImportTip: 'Or directly type',
+      importFromFileSuccess: 'Successfully imported {count} messages from file {filePath}. (you can input /history to view)',
+      importFromFileFailed: 'Failed to import history from file {filePath}.',
+      fileSearchTip: 'Tip: Use @ symbol to search and select files',
+      messageCount: 'messages',
+      exportFailedDirectExit: 'Export failed, exiting directly',
+      fileImportWaiting: '🔍 You can now type @ to search files, or directly type file path',
+      fileImportWaitingTip: '   Type anything else to cancel file import mode',
+      fileImportCancelled: 'File import mode cancelled',
+      selectJsonFileOnly: 'Please select .json format history file',
+      overwriteConfirmOptions: '[y]yes  [n]no',
+      overwriteInvalidInput: 'Please enter y(yes) or n(no)',
+      editor: {
+        title: 'History Record Editor',
+        instructions: 'Use ↑↓ arrow keys to select, [Del/d] delete, [q/Esc] exit, [s] save',
+        noHistoryToEdit: 'No history records to edit',
+        userMessage: 'User',
+        aiMessage: 'AI',
+        deletedMessage: 'Deleted',
+        deleteConfirm: 'Are you sure you want to delete this message? This will also delete related AI responses.',
+        deleteConfirmOptions: '[y/yes] Delete  [n/no] Cancel',
+        saveConfirm: 'Do you want to save the changes?',
+        saveConfirmOptions: '[y/yes] Save  [n/no] Discard',
+        saveSuccess: 'History records saved',
+        saveCancel: 'Changes discarded',
+        deletedCount: 'Deleted {count} messages',
+        exitWithoutSave: 'There are unsaved changes, are you sure you want to exit?',
+        exitWithoutSaveOptions: '[y/yes] Exit  [n/no] Return',
+        keyHelp: {
+          navigation: 'Navigation: ↑/↓ select message',
+          delete: 'Delete: Del/d delete selected message',
+          save: 'Save: s save changes',
+          exit: 'Exit: q/Esc exit editor'
+        }
+      }
     }
   },
   config: {
@@ -231,6 +308,7 @@ export const en: Messages = {
       maxConcurrency: 'Set Max Concurrency',
       role: 'Set System Role',
       mcpConfig: 'Edit MCP Config',
+      mcpFunctionConfirmation: 'Set MCP Function Confirmation',
       viewConfig: 'View Current Config',
       resetConfig: 'Reset All Config',
       back: '← Back to Main Menu'
@@ -243,6 +321,7 @@ export const en: Messages = {
       maxConcurrency: 'Set the maximum number of concurrent API requests',
       role: 'Set the system role and behavior characteristics of the AI assistant',
       mcpConfig: 'Edit Model Context Protocol (MCP) server configuration',
+      mcpFunctionConfirmation: 'Select MCP functions that require manual confirmation',
       viewConfig: 'View all currently saved configuration',
       resetConfig: 'Clear all saved configurations',
       back: 'Return to the main menu interface'
@@ -257,11 +336,13 @@ export const en: Messages = {
       mcpConfigInput: 'Edit MCP configuration JSON',
       baseUrlPlaceholder: 'https://api.openai.com/v1',
       apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-      modelPlaceholder: 'gpt-4o-mini',
+      modelPlaceholder: 'gpt-4.1-mini',
       contextTokensPlaceholder: '128000',
       maxConcurrencyPlaceholder: '5',
       rolePlaceholder: 'You are a professional AI programming assistant with the following characteristics:\n- Proficient in multiple programming languages and frameworks\n- Able to provide clear and accurate technical solutions\n- Rich experience in software development\n- Good at explaining complex technical concepts\n- Focus on code quality and best practices\n\nPlease provide professional programming advice and solutions based on user-specific needs.',
-      mcpConfigPlaceholder: '{\n  "mcpServers": {\n    "context7": {\n      "url": "https://mcp.context7.com/mcp"\n    },\n    "npm-search": {\n      "command": "npx",\n      "args": ["-y", "npm-search-mcp-server"]\n    }\n  }\n}',
+      mcpConfigPlaceholder: '{\n  "mcpServers": {\n    \n  }\n}',
+      mcpFunctionConfirmationPrompt: 'Select MCP functions that require manual confirmation',
+      confirmMcpFunctionConfirmation: 'Enable MCP function manual confirmation',
       confirmReset: 'Are you sure you want to reset all configurations? This action cannot be undone'
     },
     messages: {
@@ -280,7 +361,10 @@ export const en: Messages = {
       allConfigured: 'All configurations are set',
       invalidJson: 'Invalid JSON format, please check syntax',
       mcpConfigUpdated: 'MCP configuration updated, system automatically added required built-in services',
-      mcpSystemServicesRestored: 'Missing system MCP services have been automatically restored'
+      mcpSystemServicesRestored: 'Missing system MCP services have been automatically restored',
+      mcpFunctionConfirmationSaved: 'MCP function confirmation settings saved',
+      noMcpFunctionsFound: 'No MCP functions found',
+      mcpFunctionConfirmationInstructions: 'Instructions: [Space]toggle  [a]select all  [i]invert selection  [Enter]save'
     },
     labels: {
       baseUrl: 'API Base URL',
@@ -290,6 +374,7 @@ export const en: Messages = {
       maxConcurrency: 'Max Concurrency',
       role: 'System Role',
       mcpConfig: 'MCP Config',
+      mcpFunctionConfirmation: 'MCP Function Confirmation',
       status: 'Status',
       configured: 'Configured',
       notConfigured: 'Not Configured'
@@ -342,13 +427,9 @@ export const en: Messages = {
       cannotDelete: 'Built-in services are protected and cannot be deleted'
     },
     services: {
-      fileReader: {
-        name: 'file-reader',
-        description: 'Built-in file reading service - running natively'
-      },
-      fileOperations: {
-        name: 'file-operations',
-        description: 'Built-in file operations service - create/delete files and directories'
+      fileSystem: {
+        name: 'file-system',
+        description: 'Built-in unified file system service - reading, editing, creating files and directory management'
       }
     },
     validation: {

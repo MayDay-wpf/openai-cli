@@ -12,8 +12,8 @@ process.on('warning', (warning) => {
 });
 
 import { Command } from 'commander';
-import { WelcomeScreen } from './ui/screens/welcome';
 import { GlobalMCPManager } from './mcp/manager';
+import { WelcomeScreen } from './ui/screens/welcome';
 
 // 导出MCP模块供外部使用
 export * from './mcp';
@@ -24,7 +24,7 @@ const program = new Command();
 
 program
   .name('openai-cli')
-  .description('OpenAI CLI Coding Agent - 您的智能编程助手')
+  .description('OpenAI CLI Coding Agent - Your intelligent programming assistant')
   .version(packageJson.version);
 
 program
@@ -33,11 +33,11 @@ program
       // 更新MCP配置（修复旧配置）
       const { StorageService } = await import('./services/storage');
       StorageService.updateMcpConfig();
-      
+
       // 初始化系统MCP服务
       const mcpManager = GlobalMCPManager.getInstance();
       await mcpManager.initialize();
-      
+
       // 启动主界面
       const welcome = new WelcomeScreen();
       await welcome.show();

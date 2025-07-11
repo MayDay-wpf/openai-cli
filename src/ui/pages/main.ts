@@ -55,8 +55,11 @@ export class MainPage {
           this.loadingController = null;
         }
       },
-      getSelectedFiles: () => {
-        return this.getSelectedFiles();
+      getSelectedImageFiles: () => {
+        return this.getSelectedImageFiles();
+      },
+      getSelectedTextFiles: () => {
+        return this.getSelectedTextFiles();
       },
       addMessage: (message: Message) => {
         this.messages.push(message);
@@ -98,6 +101,9 @@ export class MainPage {
 
     // 清空消息
     this.messages = [];
+
+    // 重置命令管理器状态
+    this.commandManager.resetStates();
 
     // 清除选中文件列表
     this.clearSelectedFiles();
@@ -154,9 +160,14 @@ export class MainPage {
     return { ...this.chatState };
   }
 
-  // 公开API：获取当前选中的文件列表
-  getSelectedFiles(): string[] {
-    return this.inputHandler.getSelectedFiles();
+  // 公开API：获取当前选中的图片文件列表
+  getSelectedImageFiles(): string[] {
+    return this.inputHandler.getSelectedImageFiles();
+  }
+
+  // 公开API：获取当前选中的文本文件列表
+  getSelectedTextFiles(): string[] {
+    return this.inputHandler.getSelectedTextFiles();
   }
 
   // 公开API：清除选中文件列表
@@ -174,6 +185,7 @@ export class MainPage {
         isProcessing: false
       };
       this.messages = [];
+      this.commandManager.resetStates();
       this.loadingController = null;
     }
 
@@ -268,11 +280,17 @@ export class MainPage {
         const userInput = await this.getUserInput();
 
         if (userInput === '/exit') {
-          break;
+          const exitAction = await this.commandManager.handleExitWithHistoryCheck(this.messages);
+          if (exitAction !== 'cancel') {
+            break;
+          } else {
+            continue; // 用户取消退出，继续聊天循环
+          }
         }
 
         if (userInput === '/clear') {
           this.messages = [];
+          this.commandManager.setHasExportedHistory(false);
           // 清除选中文件列表
           this.clearSelectedFiles();
           // 强制清屏
@@ -281,6 +299,35 @@ export class MainPage {
           continue;
         }
 
+        // 使用 CommandManager 处理用户输入
+        const commandResult = await this.commandManager.handleInput(userInput, this.messages);
+
+        if (commandResult.handled) {
+          // 命令已被处理
+          if (commandResult.newMessages) {
+            this.messages = commandResult.newMessages;
+          }
+          if (commandResult.shouldContinue) {
+            continue;
+          }
+          if (commandResult.shouldExit) {
+            break;
+          }
+        }
+
+        // 如果 CommandManager 没有处理，检查是否需要处理文件选择
+        const selectedTextFiles = this.getSelectedTextFiles();
+        if (this.commandManager.isWaitingForFileImportState() && selectedTextFiles.some(f => f.startsWith('@'))) {
+          const fileResult = await this.commandManager.handleFileSelection(selectedTextFiles, this.messages);
+          if (fileResult.handled) {
+            if (fileResult.newMessages) {
+              this.messages = fileResult.newMessages;
+            }
+            continue;
+          }
+        }
+
+        // 处理其他命令
         if (userInput === '/help') {
           this.helpManager.showHelp(this.commandManager.getCommands());
           continue;
@@ -296,9 +343,30 @@ export class MainPage {
           continue;
         }
 
+        if (userInput === '/edit-history') {
+          // /edit-history 命令由 CommandManager 处理
+          const commandResult = await this.commandManager.handleInput(userInput, this.messages);
+          if (commandResult.handled && commandResult.newMessages) {
+            this.messages = commandResult.newMessages;
+          }
+          continue;
+        }
+
         if (userInput === '/init') {
           await this.handleInitCommand();
           continue;
+        }
+
+        // 检查是否选择了 JSON 文件，询问是否要导入历史记录
+        const selectedFiles = this.getSelectedTextFiles();
+        if (selectedFiles.some(f => f.includes('@') && f.includes('.json'))) {
+          const jsonFiles = selectedFiles.filter(file => file.endsWith('.json'));
+          if (jsonFiles.length > 0) {
+            const historyMgmt = this.currentMessages.main.historyManagement;
+            console.log(chalk.yellow(`${historyMgmt.jsonFileDetected}：${jsonFiles.join(', ')}`));
+            console.log(chalk.cyan(historyMgmt.historyImportTip));
+            console.log(chalk.gray(`${historyMgmt.directImportTip}：@${jsonFiles[0]}`));
+          }
         }
 
         // 添加用户消息并直接显示
@@ -470,6 +538,12 @@ export class MainPage {
           if (keyCode === 3) {
             cleanup();
             process.stdout.write('\n');
+            // 检查是否需要导出历史记录
+            const exitAction = await this.commandManager.handleExitWithHistoryCheck(this.messages);
+            if (exitAction === 'cancel') {
+              // 用户取消退出，重新开始输入循环
+              return;
+            }
             resolve('/exit');
             return;
           }

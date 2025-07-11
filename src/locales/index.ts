@@ -1,14 +1,10 @@
-import { Messages, Language } from '../types/language';
-import { zh } from './lang/zh';
+import { Language, Messages } from '../types/language';
 import { en } from './lang/en';
+import { zh } from './lang/zh';
 
 const availableMessages: Partial<Record<Language, Messages>> = {
   zh,
   en
-  // 其他语言可以在这里添加
-  // ja: 需要时导入日语翻译
-  // ko: 需要时导入韩语翻译
-  // 等等...
 };
 
 export const getCurrentMessages = (lang: Language): Messages => {

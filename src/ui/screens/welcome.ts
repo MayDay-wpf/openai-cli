@@ -95,6 +95,7 @@ export class WelcomeScreen {
 
     // 主标题和副标题
     console.log('  ' + this.gradients.primary(messages.welcome.tagline));
+    console.log('  ' + this.gradients.accent('Github: https://github.com/MayDay-wpf/openai-cli'));
     console.log();
   }
 

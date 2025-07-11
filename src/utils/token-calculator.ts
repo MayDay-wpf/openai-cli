@@ -3,9 +3,11 @@ import { ChatMessage } from '../services/openai';
 import { StorageService } from '../services/storage';
 
 export interface Message {
-    type: 'user' | 'ai';
+    type: 'user' | 'ai' | 'system';
     content: string;
     timestamp: Date;
+    tool_calls?: any[];
+    tool_call_id?: string;
 }
 
 export interface TokenCalculationResult {
@@ -49,7 +51,17 @@ export class TokenCalculator {
     static calculateChatMessageTokens(message: ChatMessage): number {
         // 每个消息都有一些固定开销：角色标识、格式化等
         const roleOverhead = 4; // 角色信息的大概开销
-        const contentTokens = this.calculateTokens(message.content);
+        let contentForTokenCalculation = '';
+        if (typeof message.content === 'string') {
+            contentForTokenCalculation = message.content;
+        } else if (Array.isArray(message.content)) {
+            contentForTokenCalculation = message.content
+                .filter(part => part.type === 'text')
+                // @ts-ignore
+                .map(part => part.text)
+                .join(' ');
+        }
+        const contentTokens = this.calculateTokens(contentForTokenCalculation);
         return contentTokens + roleOverhead;
     }
 

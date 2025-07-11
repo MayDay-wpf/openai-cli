@@ -1,21 +1,21 @@
 // MCP模块主导出文件
-export * from './types';
-export * from './base-service';
-export * from './services';
-export * from './manager';
 export * from './api';
+export * from './base-service';
+export * from './manager';
+export * from './services';
+export * from './types';
 
 // 导入主要服务和工具
-export { BaseMCPService } from './base-service';
-export { FileReaderService } from './services/file-reader';
-export { getAllMCPServices, createMCPService, MCPServices } from './services';
-export { GlobalMCPManager } from './manager';
 export { BuiltInMCPAPI } from './api';
+export { BaseMCPService } from './base-service';
+export { GlobalMCPManager } from './manager';
+export { MCPServices, createMCPService, getAllMCPServices } from './services';
+export { FileSystemService } from './services/file-system';
 
 // MCP服务管理器
 import { BaseMCPService } from './base-service';
-import { MCPRequest, MCPResponse } from './types';
 import { createMCPService, getAllMCPServices } from './services';
+import { MCPRequest, MCPResponse } from './types';
 
 export class MCPServiceManager {
   private services: Map<string, BaseMCPService> = new Map();
@@ -27,7 +27,7 @@ export class MCPServiceManager {
   // 初始化所有服务
   private initializeServices() {
     const availableServices = getAllMCPServices();
-    
+
     for (const serviceName of Object.keys(availableServices)) {
       try {
         const service = createMCPService(serviceName as any);
@@ -42,21 +42,21 @@ export class MCPServiceManager {
   // 获取所有服务信息
   getServicesInfo() {
     const servicesInfo: any[] = [];
-    
+
     for (const [serviceName, service] of this.services) {
       servicesInfo.push({
         serviceName,
         ...service.getServiceInfo()
       });
     }
-    
+
     return servicesInfo;
   }
 
   // 处理MCP请求
   async handleRequest(serviceName: string, request: MCPRequest): Promise<MCPResponse> {
     const service = this.services.get(serviceName);
-    
+
     if (!service) {
       return {
         id: request.id,
@@ -93,7 +93,7 @@ export class MCPServiceManager {
   // 获取所有服务的工具列表
   getAllTools() {
     const allTools: any[] = [];
-    
+
     for (const [serviceName, service] of this.services) {
       const tools = service.getTools().map(tool => ({
         ...tool,
@@ -101,7 +101,7 @@ export class MCPServiceManager {
       }));
       allTools.push(...tools);
     }
-    
+
     return allTools;
   }
 } 

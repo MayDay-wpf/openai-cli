@@ -97,13 +97,22 @@ export class InteractiveMenu {
             showMenu();
 
             const stdin = process.stdin;
-            stdin.setRawMode(true);
+            if (stdin.isTTY) {
+                stdin.setRawMode(true);
+            }
             stdin.resume();
             stdin.setEncoding('utf8');
 
             const cleanup = () => {
-                stdin.setRawMode(false);
                 stdin.removeListener('data', keyHandler);
+                if (stdin.isTTY) {
+                    try {
+                        stdin.setRawMode(false);
+                    } catch (error) {
+                        // 忽略错误
+                    }
+                }
+                stdin.pause();
                 // 恢复光标显示
                 process.stdout.write('\x1B[?25h');
             };

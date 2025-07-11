@@ -26,8 +26,8 @@ export class BuiltInMCPAPI {
       } as ReadFileParams
     };
 
-    const response = await this.getMCPManager().handleRequest('file-reader', request);
-    
+    const response = await this.getMCPManager().handleRequest('file-system', request);
+
     if (response.error) {
       throw new Error(`读取文件失败: ${response.error.message}`);
     }

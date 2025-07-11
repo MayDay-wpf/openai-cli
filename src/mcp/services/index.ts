@@ -1,14 +1,12 @@
 // MCP服务导出索引
-export { FileReaderService } from './file-reader';
+export { FileSystemService } from './file-system';
 
 // 服务注册表
-import { FileReaderService } from './file-reader';
-import { FileOperationsService } from './file-operations';
 import { BaseMCPService } from '../base-service';
+import { FileSystemService } from './file-system';
 
 export const MCPServices = {
-  'file-reader': FileReaderService,
-  'file-operations': FileOperationsService
+  'file-system': FileSystemService
 } as const;
 
 // 获取所有可用的MCP服务

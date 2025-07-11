@@ -1,4 +1,4 @@
-export type Language = 'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es' | 'ru';
+export type Language = 'en' | 'zh';
 
 export interface LanguageConfig {
   name: string;
@@ -6,14 +6,8 @@ export interface LanguageConfig {
 }
 
 export const LANGUAGES: Record<Language, LanguageConfig> = {
-  zh: { name: 'Chinese', nativeName: '中文' },
   en: { name: 'English', nativeName: 'English' },
-  ja: { name: 'Japanese', nativeName: '日本語' },
-  ko: { name: 'Korean', nativeName: '한국어' },
-  fr: { name: 'French', nativeName: 'Français' },
-  de: { name: 'German', nativeName: 'Deutsch' },
-  es: { name: 'Spanish', nativeName: 'Español' },
-  ru: { name: 'Russian', nativeName: 'Русский' }
+  zh: { name: 'Chinese', nativeName: '中文' },
 };
 
 export interface Messages {
@@ -90,7 +84,10 @@ export interface Messages {
       help: { name: string; description: string };
       config: { name: string; description: string };
       history: { name: string; description: string };
+      editHistory: { name: string; description: string };
       init: { name: string; description: string };
+      exportHistory: { name: string; description: string };
+      importHistory: { name: string; description: string };
     };
     messages: {
       configInDevelopment: string;
@@ -130,8 +127,15 @@ export interface Messages {
       };
       toolCall: {
         calling: string;
+        receiving: string;
         success: string;
         failed: string;
+        handle: string;
+        rejected: string;
+        approved: string;
+        confirm: string;
+        confirmOptions: string;
+        pleaseSelect: string;
       };
     };
     help: {
@@ -153,6 +157,7 @@ export interface Messages {
       commands: string;
       file: string;
       directory: string;
+      fileReadError: string;
     };
     responses: {
       understanding: string;
@@ -192,6 +197,71 @@ export interface Messages {
       interrupted: string;
       ctrlcToCancel: string;
     };
+    historyManagement: {
+      noHistory: string;
+      exportSuccess: string;
+      exportFailed: string;
+      importSuccess: string;
+      importFailed: string;
+      importConfirm: string;
+      importOverwrite: string;
+      importCancel: string;
+      invalidFormat: string;
+      fileNotFound: string;
+      fileSelectPrompt: string;
+      exportingHistory: string;
+      importingHistory: string;
+      confirmExit: string;
+      confirmExitPrompt: string;
+      confirmExitOptions: string;
+      exportBeforeExit: string;
+      exportBeforeExitPrompt: string;
+      exportBeforeExitOptions: string;
+      defaultSavePath: string;
+      enterDefaultPrompt: string;
+      importInstructions: string;
+      importStep1: string;
+      importStep2: string;
+      importStep3: string;
+      importExample: string;
+      jsonFileDetected: string;
+      historyImportTip: string;
+      directImportTip: string;
+      importFromFileSuccess: string;
+      importFromFileFailed: string;
+      fileSearchTip: string;
+      messageCount: string;
+      exportFailedDirectExit: string;
+      fileImportWaiting: string;
+      fileImportWaitingTip: string;
+      fileImportCancelled: string;
+      selectJsonFileOnly: string;
+      overwriteConfirmOptions: string;
+      overwriteInvalidInput: string;
+      editor: {
+        title: string;
+        instructions: string;
+        noHistoryToEdit: string;
+        userMessage: string;
+        aiMessage: string;
+        deletedMessage: string;
+        deleteConfirm: string;
+        deleteConfirmOptions: string;
+        saveConfirm: string;
+        saveConfirmOptions: string;
+        saveSuccess: string;
+        saveCancel: string;
+        deletedCount: string;
+        exitWithoutSave: string;
+        exitWithoutSaveOptions: string;
+        keyHelp: {
+          navigation: string;
+          delete: string;
+          save: string;
+          exit: string;
+        };
+      };
+    };
   };
   config: {
     title: string;
@@ -205,6 +275,7 @@ export interface Messages {
       maxConcurrency: string;
       role: string;
       mcpConfig: string;
+      mcpFunctionConfirmation: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -217,6 +288,7 @@ export interface Messages {
       maxConcurrency: string;
       role: string;
       mcpConfig: string;
+      mcpFunctionConfirmation: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -236,6 +308,8 @@ export interface Messages {
       maxConcurrencyPlaceholder: string;
       rolePlaceholder: string;
       mcpConfigPlaceholder: string;
+      mcpFunctionConfirmationPrompt: string;
+      confirmMcpFunctionConfirmation: string;
       confirmReset: string;
     };
     messages: {
@@ -255,6 +329,9 @@ export interface Messages {
       invalidJson: string;
       mcpConfigUpdated: string;
       mcpSystemServicesRestored: string;
+      mcpFunctionConfirmationSaved: string;
+      noMcpFunctionsFound: string;
+      mcpFunctionConfirmationInstructions: string;
     };
     labels: {
       baseUrl: string;
@@ -264,6 +341,7 @@ export interface Messages {
       maxConcurrency: string;
       role: string;
       mcpConfig: string;
+      mcpFunctionConfirmation: string;
       status: string;
       configured: string;
       notConfigured: string;
@@ -316,11 +394,7 @@ export interface Messages {
       cannotDelete: string;
     };
     services: {
-      fileReader: {
-        name: string;
-        description: string;
-      };
-      fileOperations: {
+      fileSystem: {
         name: string;
         description: string;
       };

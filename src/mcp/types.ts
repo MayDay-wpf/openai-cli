@@ -94,4 +94,32 @@ export interface FileOperationResult {
     files_deleted?: number;
     directories_deleted?: number;
   };
+}
+
+// 文件编辑服务相关类型
+export interface EditFileParams {
+  path: string;
+  startLine: number;
+  endLine: number;
+  newContent: string;
+  encoding?: string;
+}
+
+export interface FileEditResult {
+  success: boolean;
+  operation: 'edit_file';
+  path: string;
+  message: string;
+  editedContent?: string;
+  contextContent?: string;
+  lineRange?: {
+    edited: { start: number; end: number };
+    context: { start: number; end: number };
+  };
+  details?: {
+    originalLines: number;
+    newLines: number;
+    linesChanged: number;
+    totalLines: number;
+  };
 } 

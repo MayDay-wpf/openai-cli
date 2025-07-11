@@ -1,10 +1,18 @@
 import OpenAI from 'openai';
+import { TokenCalculator } from '../utils/token-calculator';
 import { StorageService } from './storage';
 
+export type ChatMessageContent =
+  | string
+  | (
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+  )[];
+
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  tool_calls?: any[];
+  role: 'system' | 'user' | 'assistant';
+  content: ChatMessageContent;
+  //tool_calls?: any[];
   tool_call_id?: string;
 }
 
@@ -16,6 +24,8 @@ export interface StreamOptions {
   responseFormat?: 'text' | 'json_object';
   tools?: any[];
   onChunk?: (chunk: string) => void;
+  onToolChunk?: (toolCallChunk: any) => void;
+  onAssistantMessage?: (message: { content: string, toolCalls: any[] }) => void;
   onToolCall?: (toolCall: any) => Promise<any>;
   onComplete?: (fullResponse: string) => void;
   onError?: (error: Error) => void;
@@ -35,7 +45,7 @@ export class OpenAIService {
     const apiConfig = StorageService.getApiConfig();
 
     if (!apiConfig.apiKey || !apiConfig.baseUrl) {
-      throw new Error('API配置不完整。请先设置API密钥和基础URL。');
+      throw new Error('API configuration is incomplete. Please set the API key and base URL first.');
     }
 
     if (!this.client) {
@@ -71,6 +81,73 @@ export class OpenAIService {
   }
 
   /**
+   * 将ChatMessage转换为Message格式（用于TokenCalculator）
+   */
+  private convertChatMessagesToMessages(chatMessages: ChatMessage[]): any[] {
+    return chatMessages
+      .filter(msg => msg.role !== 'system') // 排除系统消息
+      .map(msg => {
+        let content = '';
+        if (typeof msg.content === 'string') {
+          content = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          // 对于Vision请求，只提取文本部分进行token计算
+          content = msg.content
+            .filter((item): item is { type: 'text'; text: string } => item.type === 'text')
+            .map(item => item.text)
+            .join(' ');
+        }
+
+        return {
+          type: msg.role === 'assistant' ? 'ai' : msg.role,
+          content: content,
+          // 保留工具调用信息
+          //tool_calls: msg.tool_calls,
+          tool_call_id: msg.tool_call_id,
+          timestamp: new Date()
+        };
+      });
+  }
+
+  /**
+   * 使用TokenCalculator压缩消息历史
+   */
+  private compressMessagesWithTokenCalculator(messages: ChatMessage[]): ChatMessage[] {
+    // 提取系统消息
+    const systemMessages = messages.filter(msg => msg.role === 'system');
+    const systemMessageContent = systemMessages.length > 0 ? systemMessages[0].content : '';
+    const systemMessage = typeof systemMessageContent === 'string' ? systemMessageContent : '';
+
+    // 转换为Message格式
+    const historyMessages = this.convertChatMessagesToMessages(messages);
+
+    // 使用TokenCalculator进行智能选择，使用70%的上下文限制为工具调用留出空间
+    const tokenResult = TokenCalculator.selectHistoryMessages(
+      historyMessages,
+      systemMessage,
+      0.7
+    );
+
+    // 构建结果消息数组
+    const resultMessages: ChatMessage[] = [];
+
+    // 添加系统消息
+    systemMessages.forEach(msg => resultMessages.push(msg));
+
+    // 添加选中的历史消息，转换回ChatMessage格式
+    tokenResult.allowedMessages.forEach(msg => {
+      resultMessages.push({
+        role: msg.type === 'ai' ? 'assistant' : msg.type,
+        content: msg.content,
+        // 恢复工具调用信息
+        //tool_calls: msg.tool_calls,
+        tool_call_id: msg.tool_call_id,
+      });
+    });
+    return resultMessages;
+  }
+
+  /**
    * 发送聊天消息（流式输出）
    */
   async streamChat(options: StreamOptions): Promise<string> {
@@ -79,15 +156,15 @@ export class OpenAIService {
 
     const {
       messages,
-      model = apiConfig.model || 'gpt-3.5-turbo',
-      temperature = 0.7,
-      maxTokens = 2000,
+      model = apiConfig.model || 'gpt-4.1',
       responseFormat = 'text',
       tools,
       onChunk,
+      onAssistantMessage,
       onToolCall,
       onComplete,
-      onError
+      onError,
+      onToolChunk
     } = options;
 
     let fullResponse = '';
@@ -97,8 +174,6 @@ export class OpenAIService {
       const requestBody: any = {
         model,
         messages: currentMessages,
-        temperature,
-        max_tokens: maxTokens,
         stream: true, // 使用真正的流式输出
       };
 
@@ -111,17 +186,23 @@ export class OpenAIService {
         requestBody.tool_choice = 'auto';
       }
 
-      let maxToolCalls = 5; // 最大工具调用次数，防止无限循环
+      let maxToolCalls = 25; // 最大工具调用次数，防止无限循环
       let toolCallCount = 0;
       let hasToolCalls = false;
       let pendingToolCalls: any[] = [];
       let assistantMessage = '';
 
       while (toolCallCount < maxToolCalls) {
+
+        // 调试日志，打印每次请求的请求体
+        // console.log('--- OpenAI Request Body [DEBUG] ---');
+        // console.log(JSON.stringify(requestBody, null, 2));
+        // console.log('------------------------------------');
+
         const completion = await client.chat.completions.create({
           ...requestBody,
           stream: true
-        }) as any; // 临时使用any来避免类型错误
+        }) as any;
 
         hasToolCalls = false;
         pendingToolCalls = [];
@@ -143,6 +224,7 @@ export class OpenAIService {
           // 处理工具调用
           if (delta.tool_calls) {
             hasToolCalls = true;
+            onToolChunk?.(delta.tool_calls);
 
             for (const toolCallDelta of delta.tool_calls) {
               const index = toolCallDelta.index || 0;
@@ -177,11 +259,18 @@ export class OpenAIService {
           toolCallCount++;
 
           // 添加助手消息到对话历史
-          currentMessages.push({
+          const assistantResponseMessage = {
             role: 'assistant',
             content: assistantMessage,
-            tool_calls: pendingToolCalls
-          } as any);
+            //tool_calls: pendingToolCalls
+          };
+          currentMessages.push(assistantResponseMessage as any);
+
+          // 触发新的回调，通知UI层完整的助手消息
+          onAssistantMessage?.({
+            content: assistantMessage,
+            toolCalls: pendingToolCalls
+          });
 
           // 执行每个工具调用
           for (const toolCall of pendingToolCalls) {
@@ -191,9 +280,8 @@ export class OpenAIService {
 
                 // 添加工具调用结果到对话历史
                 currentMessages.push({
-                  role: 'tool',
-                  content: JSON.stringify(toolResult),
-                  tool_call_id: toolCall.id
+                  role: 'user',
+                  content: JSON.stringify(toolResult)
                 } as any);
 
               } catch (error) {
@@ -201,13 +289,15 @@ export class OpenAIService {
 
                 // 添加工具调用错误到对话历史
                 currentMessages.push({
-                  role: 'tool',
-                  content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                  tool_call_id: toolCall.id
+                  role: 'user',
+                  content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
                 } as any);
               }
             }
           }
+
+          // 使用TokenCalculator检查并压缩消息历史，防止token溢出
+          currentMessages = this.compressMessagesWithTokenCalculator(currentMessages);
 
           // 更新请求消息，继续对话
           requestBody.messages = currentMessages;
@@ -231,7 +321,7 @@ export class OpenAIService {
       return fullResponse;
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error : new Error('未知错误');
+      const errorMessage = error instanceof Error ? error : new Error('Unknown error');
       onError?.(errorMessage);
       throw errorMessage;
     }
@@ -246,9 +336,7 @@ export class OpenAIService {
 
     const {
       messages,
-      model = apiConfig.model || 'gpt-3.5-turbo',
-      temperature = 0.7,
-      maxTokens = 2000,
+      model = apiConfig.model || 'gpt-4.1',
       responseFormat = 'text'
     } = options;
 
@@ -256,8 +344,6 @@ export class OpenAIService {
       const requestBody: any = {
         model,
         messages,
-        temperature,
-        max_tokens: maxTokens,
         stream: false,
       };
 
@@ -270,32 +356,7 @@ export class OpenAIService {
       return response.choices[0]?.message?.content || '';
 
     } catch (error) {
-      throw error instanceof Error ? error : new Error('未知错误');
-    }
-  }
-
-  /**
-   * 验证API配置是否有效
-   */
-  async validateConfig(): Promise<{ valid: boolean; error?: string }> {
-    try {
-      const client = this.getClient();
-
-      // 尝试发送一个简单的请求来验证配置
-      await client.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: 'Hello' }],
-        max_tokens: 1,
-        stream: false,
-      });
-
-      return { valid: true };
-
-    } catch (error) {
-      return {
-        valid: false,
-        error: error instanceof Error ? error.message : '配置验证失败'
-      };
+      throw error instanceof Error ? error : new Error('Unknown error');
     }
   }
 
@@ -313,8 +374,8 @@ export class OpenAIService {
         .sort();
 
     } catch (error) {
-      console.warn('获取模型列表失败:', error);
-      return ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'];
+      console.warn('Failed to get model list:', error);
+      return ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o4-mini', 'o3-mini'];
     }
   }
 

@@ -1,5 +1,5 @@
-import { Language, LANGUAGES } from '../types/language';
-import { getCurrentMessages, getAvailableLanguages } from '../locales';
+import { getAvailableLanguages, getCurrentMessages } from '../locales';
+import { LANGUAGES, Language } from '../types/language';
 import { StorageService } from './storage';
 
 export type LanguageChangeCallback = (language: Language) => void;
@@ -16,7 +16,7 @@ export class LanguageService {
   private constructor() {
     // 尝试从存储中读取保存的语言设置，如果没有则使用默认语言
     const savedLanguage = StorageService.getSavedLanguage();
-    this.currentLanguage = savedLanguage || 'zh';
+    this.currentLanguage = savedLanguage || 'en';
   }
 
   /**
@@ -81,7 +81,7 @@ export class LanguageService {
    */
   onLanguageChange(callback: LanguageChangeCallback): () => void {
     this.callbacks.add(callback);
-    
+
     // 返回取消注册的函数
     return () => {
       this.callbacks.delete(callback);

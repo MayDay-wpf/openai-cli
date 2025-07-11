@@ -1,10 +1,10 @@
-import { editor, input } from '@inquirer/prompts';
+import { checkbox, editor } from '@inquirer/prompts';
 import chalk from 'chalk';
 import figlet from 'figlet';
 import { languageService } from '../../services/language';
-import { McpConfig, StorageService } from '../../services/storage';
+import { McpConfig, McpFunctionConfirmationConfig, StorageService } from '../../services/storage';
 import { AnimationUtils, StringUtils } from '../../utils';
-import { InteractiveMenu, MenuChoice } from '../components/menu';
+import { InteractiveMenu, MenuChoice, NativeInput } from '../components';
 
 export class ConfigPage {
   private readonly gradients = AnimationUtils.getGradients();
@@ -78,6 +78,11 @@ export class ConfigPage {
         description: messages.config.menuDescription.mcpConfig
       },
       {
+        name: messages.config.menuOptions.mcpFunctionConfirmation,
+        value: 'mcpFunctionConfirmation',
+        description: messages.config.menuDescription.mcpFunctionConfirmation
+      },
+      {
         name: messages.config.menuOptions.viewConfig,
         value: 'viewConfig',
         description: messages.config.menuDescription.viewConfig
@@ -135,6 +140,10 @@ export class ConfigPage {
         await this.editMcpConfig();
         break;
 
+      case 'mcpFunctionConfirmation':
+        await this.editMcpFunctionConfirmation();
+        break;
+
       case 'viewConfig':
         await this.viewCurrentConfig();
         // 查看配置后暂停让用户查看，使用自定义的等待输入方法避免终端状态冲突
@@ -172,23 +181,10 @@ export class ConfigPage {
     console.log();
 
     try {
-      const baseUrl = await input({
-        message: '  ' + messages.config.prompts.baseUrlInput + ':',
-        default: currentConfig.baseUrl || messages.config.prompts.baseUrlPlaceholder,
-        validate: (input: string) => {
-          if (!input.trim()) {
-            return messages.config.messages.invalidInput;
-          }
-
-          // 简单的URL验证
-          try {
-            new URL(input.trim());
-            return true;
-          } catch {
-            return messages.config.messages.invalidUrl;
-          }
-        }
-      });
+      const baseUrl = await NativeInput.url(
+        '  ' + messages.config.prompts.baseUrlInput + ':',
+        currentConfig.baseUrl || messages.config.prompts.baseUrlPlaceholder
+      );
       const result = { baseUrl };
 
       if (result.baseUrl && result.baseUrl.trim()) {
@@ -215,21 +211,19 @@ export class ConfigPage {
       console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${maskedKey}`));
     }
     console.log();
-    const apiKey = await input({
-      message: '  ' + messages.config.prompts.apiKeyInput + ':',
-      validate: (input: string) => {
-        if (!input.trim()) {
-          return messages.config.messages.invalidInput;
-        }
-        return true;
-      }
-    });
-    const result = { apiKey };
 
-    if (result.apiKey && result.apiKey.trim()) {
-      await AnimationUtils.showActionAnimation(messages.config.actions.saving);
-      StorageService.saveApiKey(result.apiKey.trim());
-      console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+    try {
+      const apiKey = await NativeInput.text('  ' + messages.config.prompts.apiKeyInput + ':');
+
+      if (apiKey && apiKey.trim()) {
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveApiKey(apiKey.trim());
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，直接返回
+      console.log();
+      return;
     }
   }
 
@@ -264,16 +258,10 @@ export class ConfigPage {
     let finalModel = modelChoice;
 
     if (modelChoice === 'custom') {
-      const model = await input({
-        message: '  ' + messages.config.prompts.modelInput + ':',
-        default: currentConfig.model || messages.config.prompts.modelPlaceholder,
-        validate: (input: string) => {
-          if (!input.trim()) {
-            return messages.config.messages.invalidInput;
-          }
-          return true;
-        }
-      });
+      const model = await NativeInput.text(
+        '  ' + messages.config.prompts.modelInput + ':',
+        currentConfig.model || messages.config.prompts.modelPlaceholder
+      );
       finalModel = model;
     }
     if (modelChoice === 'cancel') {
@@ -300,31 +288,16 @@ export class ConfigPage {
     console.log();
 
     try {
-      const contextTokens = await input({
-        message: '  ' + messages.config.prompts.contextTokensInput + ':',
-        default: currentConfig.contextTokens?.toString() || messages.config.prompts.contextTokensPlaceholder,
-        validate: (input: string) => {
-          if (!input.trim()) {
-            return messages.config.messages.invalidInput;
-          }
+      const contextTokens = await NativeInput.number(
+        '  ' + messages.config.prompts.contextTokensInput + ':',
+        currentConfig.contextTokens || parseInt(messages.config.prompts.contextTokensPlaceholder),
+        1000,
+        2000000
+      );
 
-          const num = parseInt(input.trim());
-          if (isNaN(num) || num <= 0) {
-            return messages.config.messages.invalidNumber;
-          }
-
-          if (num < 1000 || num > 2000000) {
-            return messages.config.messages.contextTokensRange;
-          }
-
-          return true;
-        }
-      });
-
-      if (contextTokens && contextTokens.trim()) {
-        const tokenCount = parseInt(contextTokens.trim());
+      if (contextTokens) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
-        StorageService.saveContextTokens(tokenCount);
+        StorageService.saveContextTokens(contextTokens);
         console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
       }
     } catch (error) {
@@ -347,31 +320,16 @@ export class ConfigPage {
     console.log();
 
     try {
-      const maxConcurrency = await input({
-        message: '  ' + messages.config.prompts.maxConcurrencyInput + ':',
-        default: currentConfig.maxConcurrency?.toString() || messages.config.prompts.maxConcurrencyPlaceholder,
-        validate: (input: string) => {
-          if (!input.trim()) {
-            return messages.config.messages.invalidInput;
-          }
+      const maxConcurrency = await NativeInput.number(
+        '  ' + messages.config.prompts.maxConcurrencyInput + ':',
+        currentConfig.maxConcurrency || parseInt(messages.config.prompts.maxConcurrencyPlaceholder),
+        1,
+        100
+      );
 
-          const num = parseInt(input.trim());
-          if (isNaN(num) || num <= 0) {
-            return messages.config.messages.invalidNumber;
-          }
-
-          if (num < 1 || num > 100) {
-            return messages.config.messages.maxConcurrencyRange;
-          }
-
-          return true;
-        }
-      });
-
-      if (maxConcurrency && maxConcurrency.trim()) {
-        const concurrencyCount = parseInt(maxConcurrency.trim());
+      if (maxConcurrency) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
-        StorageService.saveMaxConcurrency(concurrencyCount);
+        StorageService.saveMaxConcurrency(maxConcurrency);
         console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
       }
     } catch (error) {
@@ -408,7 +366,7 @@ export class ConfigPage {
       });
 
       // 重置终端状态，防止影响后续交互
-      this.resetTerminalState();
+      // this.resetTerminalState(); // Removed as per edit hint
 
       if (role && role.trim()) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
@@ -417,7 +375,7 @@ export class ConfigPage {
       }
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
-      this.resetTerminalState();
+      // this.resetTerminalState(); // Removed as per edit hint
       console.log();
       return;
     }
@@ -463,19 +421,19 @@ export class ConfigPage {
       });
 
       // 重置终端状态，防止影响后续交互
-      this.resetTerminalState();
+      // this.resetTerminalState(); // Removed as per edit hint
 
       if (mcpConfigJson && mcpConfigJson.trim()) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
-        
+
         // 验证并保存配置
         const validation = StorageService.validateMcpConfigJson(mcpConfigJson.trim());
         if (validation.isValid && validation.parsedConfig) {
           StorageService.saveMcpConfig(validation.parsedConfig);
-          
+
           // 显示保存成功消息
           console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
-          
+
           // 如果有系统服务被恢复，显示额外信息
           if (validation.hasSystemUpdates && validation.restoredServices && validation.restoredServices.length > 0) {
             console.log('  ' + chalk.yellow('ℹ ' + messages.config.messages.mcpSystemServicesRestored));
@@ -487,7 +445,153 @@ export class ConfigPage {
       }
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
-      this.resetTerminalState();
+      // this.resetTerminalState(); // Removed as per edit hint
+      console.log();
+      return;
+    }
+  }
+
+  private async editMcpFunctionConfirmation(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getMcpFunctionConfirmationConfig();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.mcpFunctionConfirmation));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.mcpFunctionConfirmation));
+    console.log();
+
+    try {
+      // 获取所有可用的MCP函数（包括内置和外部）
+      await AnimationUtils.showActionAnimation('正在检测和连接MCP服务...', 500);
+
+      // 使用SystemDetector获取所有工具定义
+      const { SystemDetector } = await import('../../services/system-detector');
+      const systemDetector = new SystemDetector();
+
+      try {
+        // 先执行完整的系统检测，这会连接所有MCP服务器
+        const detectionResult = await systemDetector.detectSystem();
+
+        // 然后获取所有工具定义
+        const allToolDefinitions = await systemDetector.getAllToolDefinitions();
+
+        if (!allToolDefinitions || allToolDefinitions.length === 0) {
+          console.log('  ' + chalk.yellow(messages.config.messages.noMcpFunctionsFound));
+          console.log('  ' + chalk.gray('提示: 请先配置MCP服务器，或检查MCP服务器是否正常运行'));
+
+          // 显示检测到的服务器状态
+          if (detectionResult.mcpServers && detectionResult.mcpServers.length > 0) {
+            console.log();
+            console.log('  ' + chalk.gray('MCP服务器状态:'));
+            detectionResult.mcpServers.forEach(server => {
+              const statusIcon = server.status === 'connected' ? chalk.green('✓') : chalk.red('✗');
+              const toolsInfo = server.tools ? ` (${server.tools.length} tools)` : ' (no tools)';
+              console.log(`    ${statusIcon} ${server.name}: ${server.status}${toolsInfo}`);
+              if (server.error) {
+                console.log(`      ${chalk.gray('Error:')} ${chalk.red(server.error)}`);
+              }
+            });
+          }
+          return;
+        }
+
+        console.log('  ' + chalk.green(`✓ 检测到 ${allToolDefinitions.length} 个MCP函数`));
+
+        // 显示服务器连接状态
+        if (detectionResult.mcpServers && detectionResult.mcpServers.length > 0) {
+          const connectedServers = detectionResult.mcpServers.filter(s => s.status === 'connected');
+          const totalTools = detectionResult.mcpServers.reduce((sum, s) => sum + (s.tools?.length || 0), 0);
+          console.log('  ' + chalk.gray(`已连接 ${connectedServers.length}/${detectionResult.mcpServers.length} 个服务器，共 ${totalTools} 个工具`));
+        }
+        console.log();
+
+        // 创建复选框选项
+        const checkboxOptions = allToolDefinitions.map(toolDef => {
+          const functionName = toolDef.function.name;
+          const description = toolDef.function.description || 'No description available';
+
+          // 提取服务器名（从函数名中）
+          const serverName = functionName.includes('_') ? functionName.split('_')[0] : 'unknown';
+
+          return {
+            name: `[${serverName}] ${functionName} - ${description.length > 50 ? description.substring(0, 50) + '...' : description}`,
+            value: functionName,
+            checked: currentConfig[functionName] === true
+          };
+        });
+
+        // 显示当前配置状态
+        const confirmedFunctions = Object.keys(currentConfig).filter(key => currentConfig[key] === true);
+        if (confirmedFunctions.length > 0) {
+          console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${confirmedFunctions.length} ${messages.config.labels.configured}`));
+          confirmedFunctions.forEach(funcName => {
+            console.log('    ' + chalk.green('✓ ') + chalk.gray(funcName));
+          });
+        } else {
+          console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${messages.config.labels.notConfigured}`));
+        }
+        console.log();
+
+        // 显示操作说明
+        console.log('  ' + chalk.yellow(messages.config.messages.mcpFunctionConfirmationInstructions));
+        console.log();
+
+        // 使用复选框让用户选择
+        const selectedFunctions = await checkbox({
+          message: '  ' + messages.config.prompts.mcpFunctionConfirmationPrompt + ':',
+          choices: checkboxOptions,
+          validate: (answer) => {
+            // 允许空选择，表示所有函数都不需要确认
+            return true;
+          },
+          // 添加自定义指令
+          instructions: false // 禁用默认指令，我们已经显示了自定义指令
+        });
+
+        // 重置终端状态
+        // this.resetTerminalState(); // Removed as per edit hint
+
+        // 构建新的配置
+        const newConfig: McpFunctionConfirmationConfig = {};
+
+        // 先将所有函数设为不需要确认
+        allToolDefinitions.forEach(toolDef => {
+          const functionName = toolDef.function.name;
+          newConfig[functionName] = false;
+        });
+
+        // 然后将选中的函数设为需要确认
+        selectedFunctions.forEach(functionName => {
+          newConfig[functionName] = true;
+        });
+
+        // 保存配置
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveMcpFunctionConfirmationConfig(newConfig);
+
+        // 显示保存结果
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.mcpFunctionConfirmationSaved));
+
+        if (selectedFunctions.length > 0) {
+          console.log('  ' + chalk.gray(`已设置 ${selectedFunctions.length} 个函数需要手动确认:`));
+          selectedFunctions.forEach(funcName => {
+            console.log('    ' + chalk.green('✓ ') + chalk.white(funcName));
+          });
+        } else {
+          console.log('  ' + chalk.gray('所有MCP函数将自动执行，无需确认'));
+        }
+
+        // 清理SystemDetector资源
+        await systemDetector.cleanup();
+
+      } catch (mcpError) {
+        console.log('  ' + chalk.yellow(`获取MCP函数列表失败: ${mcpError instanceof Error ? mcpError.message : String(mcpError)}`));
+        console.log('  ' + chalk.gray('请确保MCP服务配置正确并且服务器正在运行'));
+        return;
+      }
+
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
+      // this.resetTerminalState(); // Removed as per edit hint
       console.log();
       return;
     }
@@ -587,6 +691,25 @@ export class ConfigPage {
       );
     }
 
+    // 显示MCP函数确认配置
+    const mcpFunctionConfig = StorageService.getMcpFunctionConfirmationConfig();
+    const confirmedFunctions = Object.keys(mcpFunctionConfig).filter(key => mcpFunctionConfig[key] === true);
+
+    let mcpFunctionDisplayValue: string | undefined;
+    if (confirmedFunctions.length > 0) {
+      if (confirmedFunctions.length <= 3) {
+        mcpFunctionDisplayValue = confirmedFunctions.join(', ');
+      } else {
+        mcpFunctionDisplayValue = `${confirmedFunctions.slice(0, 2).join(', ')} +${confirmedFunctions.length - 2} more`;
+      }
+    }
+
+    this.displayConfigItem(
+      messages.config.labels.mcpFunctionConfirmation,
+      mcpFunctionDisplayValue,
+      confirmedFunctions.length > 0 ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
     console.log();
 
     // 显示配置完整性状态
@@ -631,11 +754,11 @@ export class ConfigPage {
     // 显示每个MCP服务器的详细信息
     Object.entries(mcpConfig.mcpServers).forEach(([serverName, serverConfig]) => {
       // 判断是否为系统自带服务
-      const isBuiltIn = serverConfig.transport === 'builtin' || 
-                       (serverName === 'file-reader' && serverConfig.description?.includes(messages.systemDetector.builtinServices.name));
+      const isBuiltIn = serverConfig.transport === 'builtin' ||
+        (serverName === 'file-system' && serverConfig.description?.includes('Unified file system service'));
       const serverIcon = isBuiltIn ? chalk.green('●') : chalk.cyan('●');
       const serverLabel = isBuiltIn ? chalk.white.bold(serverName) + chalk.gray(' (' + messages.systemDetector.builtinServices.name + ')') : chalk.white.bold(serverName);
-      
+
       console.log('      ' + serverIcon + ' ' + serverLabel);
 
       // 智能检测服务器类型并显示相应信息

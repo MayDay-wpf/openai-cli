@@ -3,7 +3,7 @@ import { Messages } from '../../types/language';
 export const zh: Messages = {
   welcome: {
     starting: '正在初始化...',
-    tagline: 'Powered by AIBotPRO',
+    tagline: 'Powered by AIBotPRO https://aibotpro.cn',
     menuPrompt: '请选择操作',
     menuOptions: {
       start: '开始使用',
@@ -89,9 +89,21 @@ export const zh: Messages = {
         name: '/history',
         description: '查看聊天历史'
       },
+      editHistory: {
+        name: '/edit-history',
+        description: '编辑聊天历史记录'
+      },
       init: {
         name: '/init',
         description: '生成项目描述文档 (sawyou.md)'
+      },
+      exportHistory: {
+        name: '/export-history',
+        description: '导出聊天历史记录'
+      },
+      importHistory: {
+        name: '/import-history',
+        description: '导入聊天历史记录'
       }
     },
     messages: {
@@ -118,22 +130,24 @@ export const zh: Messages = {
         completed: '回复完成'
       },
       system: {
-        basePrompt: `# 角色:
-                      - 你是一个专业的AI编程助手，具有以下特点：
-                      - 熟练掌握多种编程语言和框架
-                      - 能够提供清晰、准确的技术解决方案
-                      - 具有丰富的软件开发经验
-                      - 善于解释复杂的技术概念
-                      - 注重代码质量和最佳实践
-                    # 工具使用:
-                      - 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作
-                      - 你可以多次使用工具，且无任何限制
-                      - 使用任何工具不需要用户同意，你可以直接使用
-
-                    *请根据用户的具体需求提供专业的编程建议和解决方案。*
-
-                    # 下面是用户对你的角色要求:（如果没有请忽略）`,
-        fileReferencePrompt: '\n\n用户选中了以下文件（通过@语法引用）：\n{fileList}\n\n请注意这些文件引用，你可以基于这些文件路径来回答用户的问题。用户可能会询问关于这些文件的问题。'
+        basePrompt: '# 角色:\n' +
+          '- 你是一个专业的AI编程助手，具有以下特点：\n' +
+          '- 熟练掌握多种编程语言和框架\n' +
+          '- 能够提供清晰、准确的技术解决方案\n' +
+          '- 具有丰富的软件开发经验\n' +
+          '- 善于解释复杂的技术概念\n' +
+          '- 注重代码质量和最佳实践\n' +
+          '# 工具使用:\n' +
+          '- 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作\n' +
+          '- 你可以多次使用工具，且无任何限制\n' +
+          '- 使用任何工具不需要用户同意，你可以直接使用\n' +
+          '- 尤其要积极使用文件操作工具（如`list_dir`, `read_file`, `edit_file`）来探索项目、理解代码并直接帮助用户解决问题。\n\n' +
+          '*请根据用户的具体需求提供专业的编程建议和解决方案。*\n\n' +
+          '# 下面是用户对你的角色要求:（如果没有请忽略）\n\n' +
+          '# 执行环境\n' +
+          '- 当前工作目录: {cwd}\n' +
+          '- 当前时间: {time}',
+        fileReferencePrompt: '\n\n# 用户选择的文件\n用户选中了以下文件：\n{fileList}\n\n请注意这些文件引用，你可以基于这些文件路径来回答用户的问题。用户在输入中使用@语法来引用这些文件，但此处显示的是纯文件路径（不包含@符号）。'
       },
       format: {
         timeLocale: 'zh-CN'
@@ -146,8 +160,15 @@ export const zh: Messages = {
       },
       toolCall: {
         calling: '🛠️ 调用工具: {name}',
+        receiving: '正在接收工具调用...',
         success: '✅ 工具调用成功',
-        failed: '❌ 工具调用失败: {error}'
+        failed: '❌ 工具调用失败: {error}',
+        handle: '⚠️ 此函数需要手动确认才能执行',
+        rejected: '❌ 用户拒绝执行此函数',
+        approved: '✅ 用户确认执行此函数',
+        confirm: '是否执行此函数？',
+        confirmOptions: '[y]是  [n]否  [Enter]默认(是)',
+        pleaseSelect: '请选择: '
       }
     },
     help: {
@@ -168,7 +189,8 @@ export const zh: Messages = {
       title: '文件搜索',
       commands: '可用指令',
       file: '文件',
-      directory: '目录'
+      directory: '目录',
+      fileReadError: '读取文件失败: {filePath}'
     },
     responses: {
       understanding: '我理解您的问题。让我为您提供一个详细的解答...',
@@ -207,6 +229,71 @@ export const zh: Messages = {
       failed: '生成失败',
       interrupted: '生成被中断',
       ctrlcToCancel: '按 Ctrl+C 可中断生成'
+    },
+    historyManagement: {
+      noHistory: '暂无聊天历史记录',
+      exportSuccess: '历史记录导出成功',
+      exportFailed: '历史记录导出失败',
+      importSuccess: '历史记录导入成功',
+      importFailed: '历史记录导入失败',
+      importConfirm: '确定要导入历史记录吗？',
+      importOverwrite: '检测到现有历史记录，是否要覆盖？',
+      importCancel: '导入已取消',
+      invalidFormat: '文件格式无效',
+      fileNotFound: '文件不存在',
+      fileSelectPrompt: '请输入文件路径',
+      exportingHistory: '正在导出历史记录...',
+      importingHistory: '正在导入历史记录...',
+      confirmExit: '确定要退出吗？',
+      confirmExitPrompt: '检测到聊天历史记录，是否在退出前导出？',
+      confirmExitOptions: '[y]导出并退出  [n]直接退出  [c]取消',
+      exportBeforeExit: '导出历史记录',
+      exportBeforeExitPrompt: '请选择操作',
+      exportBeforeExitOptions: '[y]导出  [n]跳过  [c]取消',
+      defaultSavePath: '默认保存路径',
+      enterDefaultPrompt: '回车使用默认',
+      importInstructions: '历史记录导入说明：',
+      importStep1: '1. 输入 @ 符号开始搜索文件',
+      importStep2: '2. 选择 .json 历史记录文件',
+      importStep3: '3. 或者直接输入 @文件路径（如：@chat-history.json）',
+      importExample: '示例：@chat-history-2025-07-11T14-42-16.json',
+      jsonFileDetected: '检测到 JSON 文件',
+      historyImportTip: '提示：如果这是历史记录文件，可以使用 /import-history 命令，然后输入文件路径',
+      directImportTip: '或者直接输入',
+      importFromFileSuccess: '成功从文件 {filePath} 导入 {count} 条历史记录。(您可以输入 /history 查看)',
+      importFromFileFailed: '从文件 {filePath} 导入历史记录失败。',
+      fileSearchTip: '提示：使用 @ 符号可以搜索和选择文件',
+      messageCount: '条消息',
+      exportFailedDirectExit: '导出失败，直接退出',
+      fileImportWaiting: '🔍 现在您可以输入 @ 开始搜索文件，或直接输入文件路径',
+      fileImportWaitingTip: '   输入其他内容将取消文件导入模式',
+      fileImportCancelled: '已取消文件导入模式',
+      selectJsonFileOnly: '请选择 .json 格式的历史记录文件',
+      overwriteConfirmOptions: '[y]是  [n]否',
+      overwriteInvalidInput: '请输入 y(是) 或 n(否)',
+      editor: {
+        title: '历史记录编辑器',
+        instructions: '使用 ↑↓ 箭头键选择，[Del/d] 删除，[q/Esc] 退出，[s] 保存',
+        noHistoryToEdit: '没有历史记录可编辑',
+        userMessage: 'User',
+        aiMessage: 'AI',
+        deletedMessage: '已删除',
+        deleteConfirm: '确定要删除此消息吗？这将同时删除相关的AI回复。',
+        deleteConfirmOptions: '[y/是] 删除  [n/否] 取消',
+        saveConfirm: '是否保存修改？',
+        saveConfirmOptions: '[y/是] 保存  [n/否] 放弃',
+        saveSuccess: '历史记录已保存',
+        saveCancel: '修改已放弃',
+        deletedCount: '已删除 {count} 条消息',
+        exitWithoutSave: '有未保存的修改，确定要退出吗？',
+        exitWithoutSaveOptions: '[y/是] 退出  [n/否] 返回',
+        keyHelp: {
+          navigation: '导航：↑/↓ 选择消息',
+          delete: '删除：Del/d 删除选中消息',
+          save: '保存：s 保存修改',
+          exit: '退出：q/Esc 退出编辑器'
+        }
+      }
     }
   },
   config: {
@@ -221,6 +308,7 @@ export const zh: Messages = {
       maxConcurrency: '设置API最大并发',
       role: '设置系统角色',
       mcpConfig: '编辑 MCP 配置',
+      mcpFunctionConfirmation: '设置 MCP 函数确认',
       viewConfig: '查看当前配置',
       resetConfig: '重置所有配置',
       back: '← 返回主菜单'
@@ -233,6 +321,7 @@ export const zh: Messages = {
       maxConcurrency: '设置API请求的最大并发数量',
       role: '设置AI助手的系统角色和行为特征',
       mcpConfig: '编辑 Model Context Protocol (MCP) 服务器配置',
+      mcpFunctionConfirmation: '选择需要手动确认的 MCP 函数',
       viewConfig: '查看当前保存的所有配置信息',
       resetConfig: '清除所有已保存的配置',
       back: '返回到主菜单界面'
@@ -247,11 +336,13 @@ export const zh: Messages = {
       mcpConfigInput: '请编辑 MCP 配置 JSON',
       baseUrlPlaceholder: 'https://api.openai.com/v1',
       apiKeyPlaceholder: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-      modelPlaceholder: 'gpt-4o-mini',
+      modelPlaceholder: 'gpt-4.1-mini',
       contextTokensPlaceholder: '128000',
       maxConcurrencyPlaceholder: '5',
       rolePlaceholder: '你是一个专业的AI编程助手，具有以下特点：\n- 熟练掌握多种编程语言和框架\n- 能够提供清晰、准确的技术解决方案\n- 具有丰富的软件开发经验\n- 善于解释复杂的技术概念\n- 注重代码质量和最佳实践\n\n请根据用户的具体需求提供专业的编程建议和解决方案。',
-      mcpConfigPlaceholder: '{\n  "mcpServers": {\n    "context7": {\n      "url": "https://mcp.context7.com/mcp"\n    },\n    "npm-search": {\n      "command": "npx",\n      "args": ["-y", "npm-search-mcp-server"]\n    }\n  }\n}',
+      mcpConfigPlaceholder: '{\n  "mcpServers": {\n   \n  }\n}',
+      mcpFunctionConfirmationPrompt: '选择需要手动确认的 MCP 函数',
+      confirmMcpFunctionConfirmation: '是否启用MCP函数手动确认',
       confirmReset: '确定要重置所有配置吗？此操作不可撤销'
     },
     messages: {
@@ -270,7 +361,10 @@ export const zh: Messages = {
       allConfigured: '所有配置项已设置完成',
       invalidJson: '无效的JSON格式，请检查语法',
       mcpConfigUpdated: 'MCP配置已更新，系统自动添加了必需的内置服务',
-      mcpSystemServicesRestored: '已自动恢复缺失的系统MCP服务'
+      mcpSystemServicesRestored: '已自动恢复缺失的系统MCP服务',
+      mcpFunctionConfirmationSaved: 'MCP函数确认设置已保存',
+      noMcpFunctionsFound: '未找到可用的MCP函数',
+      mcpFunctionConfirmationInstructions: '操作说明: [空格]选中/取消  [a]全选  [i]全反选  [Enter]保存'
     },
     labels: {
       baseUrl: 'API 基础地址',
@@ -280,6 +374,7 @@ export const zh: Messages = {
       maxConcurrency: 'API最大并发',
       role: '系统角色',
       mcpConfig: 'MCP 配置',
+      mcpFunctionConfirmation: 'MCP函数确认',
       status: '状态',
       configured: '已配置',
       notConfigured: '未配置'
@@ -332,13 +427,9 @@ export const zh: Messages = {
       cannotDelete: '内置服务受系统保护，无法删除'
     },
     services: {
-      fileReader: {
-        name: 'file-reader',
-        description: '系统自带的文件读取服务 - 内置运行'
-      },
-      fileOperations: {
-        name: 'file-operations',
-        description: '系统自带的文件操作服务 - 创建/删除文件和目录'
+      fileSystem: {
+        name: 'file-system',
+        description: '系统自带的统一文件系统服务 - 文件读取、编辑、创建和目录管理'
       }
     },
     validation: {

@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { getCurrentMessages } from '../locales';
 import { Language } from '../types/language';
-import { languageService } from './language';
 
 export interface ApiConfig {
   baseUrl?: string;
@@ -11,6 +11,10 @@ export interface ApiConfig {
   contextTokens?: number;
   maxConcurrency?: number;
   role?: string;
+}
+
+export interface McpFunctionConfirmationConfig {
+  [functionName: string]: boolean; // true表示需要确认，false表示自动执行
 }
 
 export interface McpServer {
@@ -161,18 +165,18 @@ export class StorageService {
   static getMcpConfig(): McpConfig {
     const config = StorageService.readConfig();
     let mcpConfig = config.mcpConfig || { mcpServers: {} };
-    
+
     // 确保系统自带的MCP服务存在，如果有更新则保存
     const originalJson = JSON.stringify(mcpConfig);
     mcpConfig = StorageService.ensureBuiltInMcpServices(mcpConfig);
     const updatedJson = JSON.stringify(mcpConfig);
-    
+
     // 如果配置有变化，立即保存
     if (originalJson !== updatedJson) {
       config.mcpConfig = mcpConfig;
       StorageService.writeConfig(config);
     }
-    
+
     return mcpConfig;
   }
 
@@ -180,25 +184,26 @@ export class StorageService {
    * 确保系统自带的MCP服务存在
    */
   private static ensureBuiltInMcpServices(mcpConfig: McpConfig): McpConfig {
-    const messages = languageService.getMessages();
+    // 使用默认语言'en'获取消息，避免循环依赖
+    const messages = getCurrentMessages('en');
     const builtInServices = StorageService.getBuiltInMcpServices();
-    
+
     // 检查所有内置服务
     for (const [serviceName, serviceConfig] of Object.entries(builtInServices)) {
       const existingConfig = mcpConfig.mcpServers[serviceName];
-      
+
       if (!existingConfig) {
         // 没有配置，添加新的内置服务配置
         mcpConfig.mcpServers[serviceName] = { ...serviceConfig };
-      } else if (existingConfig.command === 'openai-cli-mcp' || 
-                 existingConfig.transport === 'stdio' ||
-                 existingConfig.description?.includes('系统自带') ||
-                 existingConfig.description?.includes('Built-in')) {
+      } else if (existingConfig.command === 'openai-cli-mcp' ||
+        existingConfig.transport === 'stdio' ||
+        existingConfig.description?.includes('系统自带') ||
+        existingConfig.description?.includes('Built-in')) {
         // 存在旧配置，更新为内置服务配置
         mcpConfig.mcpServers[serviceName] = { ...serviceConfig };
       }
     }
-    
+
     return mcpConfig;
   }
 
@@ -306,10 +311,10 @@ export class StorageService {
   static updateMcpConfig(): void {
     const config = StorageService.readConfig();
     let mcpConfig = config.mcpConfig || { mcpServers: {} };
-    
+
     // 强制重新检查和更新内置服务配置
     mcpConfig = StorageService.ensureBuiltInMcpServices(mcpConfig);
-    
+
     // 保存更新后的配置
     config.mcpConfig = mcpConfig;
     StorageService.writeConfig(config);
@@ -319,15 +324,12 @@ export class StorageService {
    * 获取系统内置MCP服务列表
    */
   static getBuiltInMcpServices(): Record<string, McpServer> {
-    const messages = languageService.getMessages();
+    // 使用默认语言'en'获取消息，避免循环依赖
+    const messages = getCurrentMessages('en');
     return {
-      'file-reader': {
+      'file-system': {
         transport: 'builtin',
-        description: messages.systemDetector.services.fileReader.description
-      },
-      'file-operations': {
-        transport: 'builtin',
-        description: messages.systemDetector.services.fileOperations.description
+        description: 'Unified file system service for reading, creating, editing, and managing files and directories'
       }
     };
   }
@@ -337,10 +339,10 @@ export class StorageService {
    * @param userMcpConfig 用户编辑的MCP配置
    * @returns 包含系统服务的完整配置和是否有更新
    */
-  static validateAndRestoreSystemMcpServices(userMcpConfig: McpConfig): { 
-    config: McpConfig; 
-    hasUpdates: boolean; 
-    restoredServices: string[] 
+  static validateAndRestoreSystemMcpServices(userMcpConfig: McpConfig): {
+    config: McpConfig;
+    hasUpdates: boolean;
+    restoredServices: string[]
   } {
     const builtInServices = StorageService.getBuiltInMcpServices();
     const restoredServices: string[] = [];
@@ -349,7 +351,7 @@ export class StorageService {
     // 检查每个系统服务是否存在
     for (const [serviceName, serviceConfig] of Object.entries(builtInServices)) {
       const userService = userMcpConfig.mcpServers[serviceName];
-      
+
       if (!userService) {
         // 系统服务不存在，添加它
         userMcpConfig.mcpServers[serviceName] = { ...serviceConfig };
@@ -371,10 +373,10 @@ export class StorageService {
   }
 
   /**
-   * 检查MCP配置中是否包含受保护的系统服务
-   * @param mcpConfigJson 用户提供的JSON字符串
-   * @returns 验证结果
-   */
+ * 检查MCP配置中是否包含受保护的系统服务
+ * @param mcpConfigJson 用户提供的JSON字符串
+ * @returns 验证结果
+ */
   static validateMcpConfigJson(mcpConfigJson: string): {
     isValid: boolean;
     error?: string;
@@ -384,10 +386,11 @@ export class StorageService {
   } {
     try {
       const parsedConfig = JSON.parse(mcpConfigJson) as McpConfig;
-      
+
       // 验证基本结构
       if (!parsedConfig.mcpServers || typeof parsedConfig.mcpServers !== 'object') {
-        const messages = languageService.getMessages();
+        // 使用默认语言'en'获取消息，避免循环依赖
+        const messages = getCurrentMessages('en');
         return {
           isValid: false,
           error: messages.systemDetector.validation.mcpConfigStructure
@@ -396,7 +399,7 @@ export class StorageService {
 
       // 检查并恢复系统服务
       const validation = StorageService.validateAndRestoreSystemMcpServices(parsedConfig);
-      
+
       return {
         isValid: true,
         parsedConfig: validation.config,
@@ -404,11 +407,46 @@ export class StorageService {
         restoredServices: validation.restoredServices
       };
     } catch (error) {
-      const messages = languageService.getMessages();
+      // 使用默认语言'en'获取消息，避免循环依赖
+      const messages = getCurrentMessages('en');
       return {
         isValid: false,
         error: messages.systemDetector.validation.invalidJson
       };
     }
+  }
+
+  /**
+   * 获取MCP函数确认配置
+   */
+  static getMcpFunctionConfirmationConfig(): McpFunctionConfirmationConfig {
+    const config = StorageService.readConfig();
+    return config.mcpFunctionConfirmation || {};
+  }
+
+  /**
+   * 保存MCP函数确认配置
+   */
+  static saveMcpFunctionConfirmationConfig(confirmationConfig: McpFunctionConfirmationConfig): void {
+    const config = StorageService.readConfig();
+    config.mcpFunctionConfirmation = confirmationConfig;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 检查指定函数是否需要确认
+   */
+  static isFunctionConfirmationRequired(functionName: string): boolean {
+    const config = StorageService.getMcpFunctionConfirmationConfig();
+    return config[functionName] === true;
+  }
+
+  /**
+   * 设置指定函数的确认状态
+   */
+  static setFunctionConfirmationRequired(functionName: string, required: boolean): void {
+    const config = StorageService.getMcpFunctionConfirmationConfig();
+    config[functionName] = required;
+    StorageService.saveMcpFunctionConfirmationConfig(config);
   }
 } 
