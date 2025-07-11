@@ -366,7 +366,7 @@ export class ConfigPage {
       });
 
       // 重置终端状态，防止影响后续交互
-      // this.resetTerminalState(); // Removed as per edit hint
+      this.resetTerminalState();
 
       if (role && role.trim()) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
@@ -375,7 +375,7 @@ export class ConfigPage {
       }
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
-      // this.resetTerminalState(); // Removed as per edit hint
+      this.resetTerminalState();
       console.log();
       return;
     }
@@ -421,7 +421,7 @@ export class ConfigPage {
       });
 
       // 重置终端状态，防止影响后续交互
-      // this.resetTerminalState(); // Removed as per edit hint
+      this.resetTerminalState();
 
       if (mcpConfigJson && mcpConfigJson.trim()) {
         await AnimationUtils.showActionAnimation(messages.config.actions.saving);
@@ -445,7 +445,7 @@ export class ConfigPage {
       }
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
-      // this.resetTerminalState(); // Removed as per edit hint
+      this.resetTerminalState();
       console.log();
       return;
     }
@@ -548,7 +548,7 @@ export class ConfigPage {
         });
 
         // 重置终端状态
-        // this.resetTerminalState(); // Removed as per edit hint
+        this.resetTerminalState();
 
         // 构建新的配置
         const newConfig: McpFunctionConfirmationConfig = {};
@@ -591,7 +591,7 @@ export class ConfigPage {
 
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
-      // this.resetTerminalState(); // Removed as per edit hint
+      this.resetTerminalState();
       console.log();
       return;
     }
