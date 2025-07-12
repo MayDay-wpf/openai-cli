@@ -819,6 +819,7 @@ export class MessageHandler {
 
         const promptParts = [
             langMessages.main.messages.system.basePrompt
+                .replace('{role}', apiConfig.role || '')
                 .replace('{cwd}', cwd)
                 .replace('{time}', currentTime)
         ];

@@ -16,7 +16,7 @@ export class ResponseManager {
       responses.analyzeRoot,
       responses.implementSteps
     ];
-    
+
     return responseArray[Math.floor(Math.random() * responseArray.length)];
   }
 
