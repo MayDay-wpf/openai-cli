@@ -102,10 +102,8 @@ export class NativeInput {
                     case 8:   // Backspace (some terminals)
                         if (inputBuffer.length > 0) {
                             inputBuffer = inputBuffer.slice(0, -1);
-                            // 清除当前行并重新显示
-                            process.stdout.write('\r');
-                            process.stdout.write(' '.repeat(200)); // 清除行
-                            process.stdout.write('\r');
+                            // 使用ANSI转义序列清除行
+                            process.stdout.write('\u001B[2K\u001B[0G');
                             process.stdout.write(chalk.white(options.message));
                             if (options.default) {
                                 process.stdout.write(chalk.gray(` (${options.default})`));
