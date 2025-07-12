@@ -277,6 +277,7 @@ export interface Messages {
       role: string;
       mcpConfig: string;
       mcpFunctionConfirmation: string;
+      maxToolCalls: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -290,6 +291,7 @@ export interface Messages {
       role: string;
       mcpConfig: string;
       mcpFunctionConfirmation: string;
+      maxToolCalls: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -300,6 +302,7 @@ export interface Messages {
       modelInput: string;
       contextTokensInput: string;
       maxConcurrencyInput: string;
+      maxToolCallsInput: string;
       roleInput: string;
       mcpConfigInput: string;
       baseUrlPlaceholder: string;
@@ -307,6 +310,7 @@ export interface Messages {
       modelPlaceholder: string;
       contextTokensPlaceholder: string;
       maxConcurrencyPlaceholder: string;
+      maxToolCallsPlaceholder: string;
       rolePlaceholder: string;
       mcpConfigPlaceholder: string;
       mcpFunctionConfirmationPrompt: string;
@@ -340,6 +344,7 @@ export interface Messages {
       model: string;
       contextTokens: string;
       maxConcurrency: string;
+      maxToolCalls: string;
       role: string;
       mcpConfig: string;
       mcpFunctionConfirmation: string;

@@ -83,6 +83,11 @@ export class ConfigPage {
         description: messages.config.menuDescription.mcpFunctionConfirmation
       },
       {
+        name: messages.config.menuOptions.maxToolCalls,
+        value: 'maxToolCalls',
+        description: messages.config.menuDescription.maxToolCalls
+      },
+      {
         name: messages.config.menuOptions.viewConfig,
         value: 'viewConfig',
         description: messages.config.menuDescription.viewConfig
@@ -142,6 +147,10 @@ export class ConfigPage {
 
       case 'mcpFunctionConfirmation':
         await this.editMcpFunctionConfirmation();
+        break;
+
+      case 'maxToolCalls':
+        await this.editMaxToolCalls();
         break;
 
       case 'viewConfig':
@@ -334,48 +343,6 @@ export class ConfigPage {
       }
     } catch (error) {
       // 用户按 ESC 或 Ctrl+C 取消输入，直接返回
-      console.log();
-      return;
-    }
-  }
-
-  private async editRole(): Promise<void> {
-    const messages = languageService.getMessages();
-    const currentConfig = StorageService.getApiConfig();
-
-    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.role));
-    console.log('  ' + chalk.gray(messages.config.menuDescription.role));
-
-    if (currentConfig.role) {
-      console.log('  ' + chalk.gray(`${messages.config.labels.status}: `));
-      console.log('    ' + chalk.gray(currentConfig.role.split('\n').join('\n    ')));
-    }
-    console.log();
-    console.log('  ' + chalk.gray(messages.config.messages.roleEditorPrompt));
-
-    try {
-      const role = await editor({
-        message: '  ' + messages.config.prompts.roleInput + ':',
-        default: currentConfig.role || messages.config.prompts.rolePlaceholder,
-        validate: (input: string) => {
-          if (!input.trim()) {
-            return messages.config.messages.invalidInput;
-          }
-          return true;
-        }
-      });
-
-      // 重置终端状态，防止影响后续交互
-      this.resetTerminalState();
-
-      if (role && role.trim()) {
-        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
-        StorageService.saveRole(role.trim());
-        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
-      }
-    } catch (error) {
-      // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
-      this.resetTerminalState();
       console.log();
       return;
     }
@@ -597,6 +564,80 @@ export class ConfigPage {
     }
   }
 
+  private async editMaxToolCalls(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getApiConfig();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.maxToolCalls));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.maxToolCalls));
+
+    if (currentConfig.maxToolCalls) {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${currentConfig.maxToolCalls}`));
+    }
+    console.log();
+
+    try {
+      const maxToolCalls = await NativeInput.number(
+        '  ' + messages.config.prompts.maxToolCallsInput + ':',
+        currentConfig.maxToolCalls || parseInt(messages.config.prompts.maxToolCallsPlaceholder),
+        1,
+        100
+      );
+
+      if (maxToolCalls) {
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveMaxToolCalls(maxToolCalls);
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，直接返回
+      console.log();
+      return;
+    }
+  }
+
+  private async editRole(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getApiConfig();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.role));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.role));
+
+    if (currentConfig.role) {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: `));
+      console.log('    ' + chalk.gray(currentConfig.role.split('\n').join('\n    ')));
+    }
+    console.log();
+    console.log('  ' + chalk.gray(messages.config.messages.roleEditorPrompt));
+
+    try {
+      const role = await editor({
+        message: '  ' + messages.config.prompts.roleInput + ':',
+        default: currentConfig.role || messages.config.prompts.rolePlaceholder,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return messages.config.messages.invalidInput;
+          }
+          return true;
+        }
+      });
+
+      // 重置终端状态，防止影响后续交互
+      this.resetTerminalState();
+
+      if (role && role.trim()) {
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveRole(role.trim());
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
+      this.resetTerminalState();
+      console.log();
+      return;
+    }
+  }
+
   /**
  * 重置终端状态，防止editor等外部工具影响后续交互
  */
@@ -658,6 +699,12 @@ export class ConfigPage {
       messages.config.labels.maxConcurrency,
       config.maxConcurrency?.toString(),
       config.maxConcurrency ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
+    this.displayConfigItem(
+      messages.config.labels.maxToolCalls,
+      config.maxToolCalls?.toString(),
+      config.maxToolCalls ? messages.config.labels.configured : messages.config.labels.notConfigured
     );
 
     this.displayConfigItem(

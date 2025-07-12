@@ -11,6 +11,7 @@ export interface ApiConfig {
   contextTokens?: number;
   maxConcurrency?: number;
   role?: string;
+  maxToolCalls?: number;
 }
 
 export interface McpFunctionConfirmationConfig {
@@ -101,7 +102,8 @@ export class StorageService {
       model: config.model,
       contextTokens: config.contextTokens || 128000,
       maxConcurrency: config.maxConcurrency || 5,
-      role: config.role
+      role: config.role,
+      maxToolCalls: config.maxToolCalls || 25,
     };
   }
 
@@ -147,6 +149,15 @@ export class StorageService {
   static saveMaxConcurrency(maxConcurrency: number): void {
     const config = StorageService.readConfig();
     config.maxConcurrency = maxConcurrency;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 保存最大工具调用次数
+   */
+  static saveMaxToolCalls(maxToolCalls: number): void {
+    const config = StorageService.readConfig();
+    config.maxToolCalls = maxToolCalls;
     StorageService.writeConfig(config);
   }
 
@@ -248,6 +259,7 @@ export class StorageService {
     if (apiConfig.model !== undefined) config.model = apiConfig.model;
     if (apiConfig.contextTokens !== undefined) config.contextTokens = apiConfig.contextTokens;
     if (apiConfig.maxConcurrency !== undefined) config.maxConcurrency = apiConfig.maxConcurrency;
+    if (apiConfig.maxToolCalls !== undefined) config.maxToolCalls = apiConfig.maxToolCalls;
     if (apiConfig.role !== undefined) config.role = apiConfig.role;
     StorageService.writeConfig(config);
   }
@@ -269,16 +281,22 @@ export class StorageService {
   }
 
   /**
-   * 清除配置文件
+   * 清除所有配置
    */
   static clearConfig(): void {
-    try {
-      if (fs.existsSync(StorageService.CONFIG_FILE)) {
-        fs.unlinkSync(StorageService.CONFIG_FILE);
-      }
-    } catch (error) {
-      console.warn('Failed to clear config file:', error);
-    }
+    const config = StorageService.readConfig();
+    delete config.baseUrl;
+    delete config.apiKey;
+    delete config.model;
+    delete config.contextTokens;
+    delete config.maxConcurrency;
+    delete config.role;
+    delete config.mcpConfig;
+    delete config.mcpFunctionConfirmation;
+    delete config.maxToolCalls;
+    // 保留语言设置
+    // delete config.language;
+    StorageService.writeConfig(config);
   }
 
   /**

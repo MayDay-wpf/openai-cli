@@ -186,7 +186,7 @@ export class OpenAIService {
         requestBody.tool_choice = 'auto';
       }
 
-      let maxToolCalls = 25; // 最大工具调用次数，防止无限循环
+      let maxToolCalls = apiConfig.maxToolCalls || 25; // 最大工具调用次数，防止无限循环
       let toolCallCount = 0;
       let hasToolCalls = false;
       let pendingToolCalls: any[] = [];
