@@ -351,6 +351,7 @@ export class MessageHandler {
         const userMessage: Message = {
             type: 'user',
             content,
+            displayContent: content,
             timestamp: new Date()
         };
 
@@ -371,15 +372,20 @@ export class MessageHandler {
         if (message.type === 'user') {
             // 美化用户消息标签
             const userPrefix = chalk.bgBlue.white.bold(` ${messages.main.messages.userLabel} `) + chalk.blue(` ${timeStr} `);
-            process.stdout.write(userPrefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.content) + '\n\n');
-        } else if (message.type === 'ai') {
-            // 美化AI消息标签
-            const aiPrefix = chalk.bgGreen.white.bold(` ${messages.main.messages.aiLabel} `) + chalk.green(` ${timeStr} `);
-            process.stdout.write(aiPrefix + '\n');
+            process.stdout.write(userPrefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.displayContent || message.content) + '\n\n');
+        } else if (message.type === 'ai' || message.type === 'tool') {
+            // 美化AI或工具消息标签
+            const isTool = message.type === 'tool';
+            const label = isTool ? messages.main.messages.toolLabel : messages.main.messages.aiLabel;
+            const bgColor = isTool ? chalk.bgYellow.black : chalk.bgGreen.white;
+
+            const prefix = bgColor.bold(` ${label} `) + chalk.green(` ${timeStr} `);
+            process.stdout.write(prefix + '\n');
 
             // 重置渲染器并处理完整内容
             this.streamRenderer.reset();
-            const formattedContent = this.streamRenderer.processChunk(message.content);
+            const contentToRender = message.displayContent || message.content;
+            const formattedContent = this.streamRenderer.processChunk(contentToRender);
             const finalContent = this.streamRenderer.finalize();
 
             process.stdout.write(formattedContent + finalContent + '\n');
@@ -414,6 +420,7 @@ export class MessageHandler {
         const aiMessage: Message = {
             type: 'ai',
             content,
+            displayContent: content,
             timestamp: new Date()
         };
 
@@ -496,7 +503,9 @@ export class MessageHandler {
 
                     const aiMessage: Message = {
                         type: 'ai',
-                        content: content,
+                        content: content, // 原始content可能为空
+                        tool_calls: toolCalls,
+                        displayContent: content,
                         timestamp: new Date()
                     };
                     this.callbacks.addMessage(aiMessage);
@@ -544,6 +553,7 @@ export class MessageHandler {
                     const aiMessage: Message = {
                         type: 'ai',
                         content: fullResponse,
+                        displayContent: fullResponse,
                         timestamp: new Date()
                     };
                     this.callbacks.addMessage(aiMessage);
@@ -626,8 +636,14 @@ export class MessageHandler {
                     const rejectionMessage = `❌ **Tool Rejected: ${functionName}**\n\n${messages.main.messages.toolCall.rejected}\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(parameters, null, 2)}\n\`\`\``;
 
                     const toolRejectedMessage: Message = {
-                        type: 'ai',
-                        content: rejectionMessage,
+                        type: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: {
+                            error: messages.main.messages.toolCall.rejected,
+                            rejected: true,
+                            functionName: functionName,
+                        },
+                        displayContent: rejectionMessage,
                         timestamp: new Date()
                     };
                     this.callbacks.addMessage(toolRejectedMessage);
@@ -694,8 +710,10 @@ export class MessageHandler {
             }
 
             const toolResultMessage: Message = {
-                type: 'ai',
-                content: resultContent,
+                type: 'tool',
+                tool_call_id: toolCall.id,
+                content: result, // 存储原始结果
+                displayContent: resultContent, // 存储格式化后的显示内容
                 timestamp: new Date()
             };
             this.callbacks.addMessage(toolResultMessage);
@@ -713,8 +731,13 @@ export class MessageHandler {
 
             // 将工具调用错误也添加到历史记录
             const errorMessage: Message = {
-                type: 'ai',
-                content: `❌ **Tool Error: ${toolCall.function?.name || 'Unknown'}**\n\n**Error:** ${errorMsg}\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(JSON.parse(toolCall.function?.arguments || '{}'), null, 2)}\n\`\`\``,
+                type: 'tool',
+                tool_call_id: toolCall.id,
+                content: {
+                    error: errorMsg,
+                    tool_call_id: toolCall.id,
+                },
+                displayContent: `❌ **Tool Error: ${toolCall.function?.name || 'Unknown'}**\n\n**Error:** ${errorMsg}\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(JSON.parse(toolCall.function?.arguments || '{}'), null, 2)}\n\`\`\``,
                 timestamp: new Date()
             };
             this.callbacks.addMessage(errorMessage);
@@ -844,12 +867,19 @@ export class MessageHandler {
 
         // 转换消息历史
         for (const msg of (recentMessages as any[])) {
-            if (msg.type === 'user' || msg.type === 'ai' || msg.type === 'tool') {
-                const role = msg.type === 'ai' ? 'assistant' : msg.type;
+            if (msg.type === 'user') {
+                chatMessages.push({ role: 'user', content: msg.content });
+            } else if (msg.type === 'ai') {
                 chatMessages.push({
-                    role,
+                    role: 'assistant',
                     content: msg.content,
+                    tool_calls: msg.tool_calls,
+                });
+            } else if (msg.type === 'tool') {
+                chatMessages.push({
+                    role: 'tool',
                     tool_call_id: msg.tool_call_id,
+                    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
                 });
             }
         }
@@ -973,13 +1003,18 @@ export class MessageHandler {
 
             if (message.type === 'user') {
                 const prefix = chalk.bgBlue.white.bold(` [${index + 1}] ${historyMessages.main.messages.userLabel} `) + chalk.blue(` ${timeStr} `);
-                process.stdout.write(prefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.content) + '\n\n');
-            } else if (message.type === 'ai') {
-                const prefix = chalk.bgGreen.white.bold(` [${index + 1}] ${historyMessages.main.messages.aiLabel} `) + chalk.green(` ${timeStr} `);
+                process.stdout.write(prefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.displayContent || message.content) + '\n\n');
+            } else if (message.type === 'ai' || message.type === 'tool') {
+                const isTool = message.type === 'tool';
+                const label = isTool ? historyMessages.main.messages.toolLabel : historyMessages.main.messages.aiLabel;
+                const bgColor = isTool ? chalk.bgYellow.black : chalk.bgGreen.white;
+
+                const prefix = bgColor.bold(` [${index + 1}] ${label} `) + chalk.green(` ${timeStr} `);
                 process.stdout.write(prefix + '\n');
 
                 const streamRenderer = new StreamRenderer();
-                const renderedOutput = streamRenderer.processChunk(message.content);
+                const contentToRender = message.displayContent || message.content;
+                const renderedOutput = streamRenderer.processChunk(contentToRender);
                 const finalOutput = streamRenderer.finalize();
                 process.stdout.write(renderedOutput + finalOutput + '\n\n');
             }

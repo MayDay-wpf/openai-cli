@@ -3,8 +3,9 @@ import { ChatMessage } from '../services/openai';
 import { StorageService } from '../services/storage';
 
 export interface Message {
-    type: 'user' | 'ai' | 'system';
-    content: string;
+    type: 'user' | 'ai' | 'system' | 'tool';
+    content: any;
+    displayContent?: string; // 用于显示的美化内容
     timestamp: Date;
     tool_calls?: any[];
     tool_call_id?: string;

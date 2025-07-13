@@ -115,6 +115,7 @@ export const en: Messages = {
       ai: 'AI',
       userLabel: '👤 User',
       aiLabel: '🤖 AI Assistant',
+      toolLabel: '🛠️ Tool',
       unknownCommand: 'Unknown command: {command}',
       codeBlock: {
         lineLabel: 'Line',

@@ -10,9 +10,9 @@ export type ChatMessageContent =
   )[];
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: ChatMessageContent;
-  //tool_calls?: any[];
+  tool_calls?: any[];
   tool_call_id?: string;
 }
 
@@ -137,10 +137,10 @@ export class OpenAIService {
     // 添加选中的历史消息，转换回ChatMessage格式
     tokenResult.allowedMessages.forEach(msg => {
       resultMessages.push({
-        role: msg.type === 'ai' ? 'assistant' : msg.type,
+        role: msg.type === 'ai' ? 'assistant' : msg.type as 'user' | 'tool',
         content: msg.content,
         // 恢复工具调用信息
-        //tool_calls: msg.tool_calls,
+        tool_calls: msg.tool_calls,
         tool_call_id: msg.tool_call_id,
       });
     });
@@ -262,7 +262,7 @@ export class OpenAIService {
           const assistantResponseMessage = {
             role: 'assistant',
             content: assistantMessage,
-            //tool_calls: pendingToolCalls
+            tool_calls: pendingToolCalls
           };
           currentMessages.push(assistantResponseMessage as any);
 
@@ -280,7 +280,8 @@ export class OpenAIService {
 
                 // 添加工具调用结果到对话历史
                 currentMessages.push({
-                  role: 'user',
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
                   content: JSON.stringify(toolResult)
                 } as any);
 
@@ -289,7 +290,8 @@ export class OpenAIService {
 
                 // 添加工具调用错误到对话历史
                 currentMessages.push({
-                  role: 'user',
+                  role: 'tool',
+                  tool_call_id: toolCall.id,
                   content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
                 } as any);
               }

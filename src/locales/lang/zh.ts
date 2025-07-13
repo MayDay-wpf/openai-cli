@@ -115,6 +115,7 @@ export const zh: Messages = {
       ai: 'AI',
       userLabel: '👤 用户',
       aiLabel: '🤖 AI助手',
+      toolLabel: '🛠️ 工具',
       unknownCommand: '未知的命令: {command}',
       codeBlock: {
         lineLabel: '行',
