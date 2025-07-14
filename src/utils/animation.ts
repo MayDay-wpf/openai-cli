@@ -25,24 +25,24 @@ export class AnimationUtils {
    * 显示可控制的加载动画（异步关闭）
    */
   static showLoadingAnimation(options: AnimationOptions): LoadingController {
-    const { text, interval = 80 } = options;
-    
+    const { text, interval = 200 } = options;
+
     // 预计算彩色文字
     const loadingText = this.gradients.primary(text);
     const staticPart = '  ';  // 缩进
     const textPart = ` ${loadingText}`;  // 空格 + 彩色文字
-    
-    const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+    const frames = ['*', '✳', '✴', '✵', '✴', '✳'];
     let frameIndex = 0;
     let animationInterval: NodeJS.Timeout | null = null;
     let isRunning = true;
-    
+
     // 隐藏光标
     process.stdout.write('\x1B[?25l');
-    
+
     // 初始显示
     process.stdout.write(staticPart + chalk.blue.bold(frames[frameIndex]) + textPart);
-    
+
     // 启动动画
     animationInterval = setInterval(() => {
       if (!isRunning) return;
@@ -50,26 +50,26 @@ export class AnimationUtils {
       // 只替换旋转符号部分，保持文字不变
       process.stdout.write('\r' + staticPart + chalk.blue.bold(frames[frameIndex]) + textPart);
     }, interval);
-    
+
     // 返回控制器
     return {
       stop(): void {
         if (!isRunning) return;
-        
+
         isRunning = false;
-        
+
         // 清除动画定时器
         if (animationInterval) {
           clearInterval(animationInterval);
           animationInterval = null;
         }
-        
+
         // 计算需要清除的长度
         const totalLength = staticPart.length + 1 + textPart.length; // 1 是旋转符号的长度
-        
+
         // 清除整行内容
         process.stdout.write('\r' + ' '.repeat(totalLength) + '\r');
-        
+
         // 恢复光标
         process.stdout.write('\x1B[?25h');
       }
@@ -84,7 +84,7 @@ export class AnimationUtils {
       text,
       interval: 100
     });
-    
+
     // 等待指定时间后停止动画
     await new Promise(resolve => setTimeout(resolve, duration));
     controller.stop();
@@ -97,21 +97,21 @@ export class AnimationUtils {
     // 完全清屏并隐藏光标
     this.forceClearScreen();
     process.stdout.write('\x1B[?25l');
-    
+
     // 获取终端高度来更好地居中显示
     const terminalHeight = process.stdout.rows || 24;
     const contentHeight = 12;
     const topPadding = Math.max(1, Math.floor((terminalHeight - contentHeight) / 2));
-    
+
     // 添加顶部填充
     console.log('\n'.repeat(topPadding));
-    
+
     // 显示告别消息（传入的figlet文字）
     console.log(this.gradients.accent(farewell));
     console.log('\n'.repeat(3)); // 增加更多空行分离标题和内容
     console.log('  ' + this.gradients.primary(exitMessage));
     console.log('\n'.repeat(2)); // 在动画前也增加空行
-    
+
     // 使用不闪烁的动画
     const controller = this.showLoadingAnimation({
       text: 'See you again!',
@@ -120,7 +120,7 @@ export class AnimationUtils {
     await new Promise(resolve => setTimeout(resolve, 100));
     controller.stop();
     console.log('\n'.repeat(1));
-    
+
     // 恢复光标
     process.stdout.write('\x1B[?25h');
   }

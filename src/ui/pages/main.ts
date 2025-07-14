@@ -271,7 +271,7 @@ export class MainPage {
 
         // 检查是否可以发送消息
         if (!this.chatState.canSendMessage) {
-          process.stdout.write(chalk.red(this.currentMessages.main.status.cannotSendMessage + '\n'));
+          //process.stdout.write(chalk.red(this.currentMessages.main.status.cannotSendMessage + '\n'));
           await new Promise(resolve => setTimeout(resolve, 1000));
           continue;
         }
@@ -336,7 +336,7 @@ export class MainPage {
               process.stdout.write(chalk.yellow(this.currentMessages.main.messages.configInDevelopment + '\n'));
               break;
             case '/history':
-              this.messageHandler.showHistory(this.messages);
+              this.commandManager.showHistory(this.messages);
               break;
             case '/init':
               await this.handleInitCommand();

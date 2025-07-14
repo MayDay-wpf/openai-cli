@@ -9,12 +9,12 @@ export * from './types';
 export { BuiltInMCPAPI } from './api';
 export { BaseMCPService } from './base-service';
 export { GlobalMCPManager } from './manager';
-export { MCPServices, createMCPService, getAllMCPServices } from './services';
 export { FileSystemService } from './services/file-system';
+export { TodosService } from './services/todos-service';
 
 // MCP服务管理器
 import { BaseMCPService } from './base-service';
-import { createMCPService, getAllMCPServices } from './services';
+import { getServices } from './services';
 import { MCPRequest, MCPResponse } from './types';
 
 export class MCPServiceManager {
@@ -26,15 +26,15 @@ export class MCPServiceManager {
 
   // 初始化所有服务
   private initializeServices() {
-    const availableServices = getAllMCPServices();
+    const availableServices = getServices();
 
-    for (const serviceName of Object.keys(availableServices)) {
+    for (const service of availableServices) {
       try {
-        const service = createMCPService(serviceName as any);
+        const serviceName = service.getServiceInfo().name;
         this.services.set(serviceName, service);
         console.log(`MCP服务已初始化: ${serviceName}`);
       } catch (error) {
-        console.error(`初始化MCP服务失败 ${serviceName}:`, error);
+        console.error(`初始化MCP服务失败:`, error);
       }
     }
   }

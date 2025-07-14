@@ -22,7 +22,7 @@ export const en: Messages = {
     },
     configCheck: {
       title: 'Configuration Check',
-      incompleteConfig: '⚠️  Incomplete Configuration',
+      incompleteConfig: '☆ Incomplete Configuration',
       missingItems: 'Missing configuration items:',
       baseUrl: '• API Base URL',
       apiKey: '• API Key',
@@ -113,9 +113,9 @@ export const en: Messages = {
       totalMessages: 'Total {count} messages',
       user: 'User',
       ai: 'AI',
-      userLabel: '👤 User',
-      aiLabel: '🤖 AI Assistant',
-      toolLabel: '🛠️ Tool',
+      userLabel: '● User',
+      aiLabel: '◎ AI Assistant',
+      toolLabel: '◆ Tool',
       unknownCommand: 'Unknown command: {command}',
       codeBlock: {
         lineLabel: 'Line',
@@ -132,19 +132,31 @@ export const en: Messages = {
         completed: 'Response completed'
       },
       system: {
-        basePrompt: '# Role:\n\n' +
-          '- You are a professional AI programming assistant with the following characteristics:\n\n' +
-          '- Proficient in multiple programming languages and frameworks\n\n' +
-          '- Capable of providing clear and accurate technical solutions\n\n' +
-          '- Possess extensive software development experience\n\n' +
-          '- Skilled at explaining complex technical concepts\n\n' +
-          '- Focus on code quality and best practices\n\n' +
-          '{role}\n' +
-          '# Tool Usage:\n\n' +
-          '- You are very adept at using tools to better understand projects and assist users in completing tasks\n\n' +
-          '- You can use tools multiple times without any restrictions\n\n' +
-          '- You can use any tools directly without user consent\n\n' +
-          '- Especially, proactively use file operation tools (e.g., `list_dir`, `read_file`, `edit_file`) to explore projects, understand code, and directly help users solve problems.\n\n' +
+        basePrompt: '# Role:\n' +
+          '- You are a professional AI programming assistant with the following characteristics:\n' +
+          '- Proficient in multiple programming languages and frameworks\n' +
+          '- Capable of providing clear and accurate technical solutions\n' +
+          '- Possess extensive software development experience\n' +
+          '- Skilled at explaining complex technical concepts\n' +
+          '- Focus on code quality and best practices\n' +
+          '{role}\n\n' +
+          '# Tool Usage Rules (MUST be strictly followed):\n' +
+          '- **One Tool at a Time**: You must strictly adhere to the "one tool per step" principle. In each response, you are only allowed to call one tool. It is strictly forbidden to call multiple tools sequentially or in parallel in a single response.\n' +
+          '- **Independent JSON Arguments**: The arguments for each tool must be a single, well-formed JSON object. It is strictly forbidden to concatenate multiple JSON objects as arguments.\n' +
+          '- **Incorrect Example (Absolutely Forbidden)**: \n' +
+          '  - Bad Call: `<tool_name>{"param":"value1"}{"param":"value2"}</tool_name>`\n' +
+          '  - Error Log: `500 invalid arguments for function some_tool, args: {"path":"."}{"path":"."}`\n' +
+          '  - This behavior causes fatal parsing errors and must be completely avoided.\n' +
+          '- **Correct Example (Must Follow)**: \n' +
+          '  - First Response: `<tool_name>{"path":"."}</tool_name>`\n' +
+          '  - (After waiting for user response) Second Response: `<another_tool>{"arg":"value"}</another_tool>`\n' +
+          '- **Self-Correction**: If you find yourself or the system generating output similar to the incorrect example above, you must immediately stop and correct your behavior, strictly following the "one tool at a time" and "independent JSON arguments" rules.\n\n' +
+          '# Original Tool Usage Instructions:\n' +
+          '- You are very adept at using tools to better understand projects and assist users in completing tasks.\n' +
+          '- You can use tools multiple times without any restrictions.\n' +
+          '- You can use any tools directly without user consent.\n' +
+          '- Especially, proactively use file operation tools (e.g., `list_dir`, `read_file`, `edit_file`) to explore projects, understand code, and directly help users solve problems.\n' +
+          '- Step By Step execution principle, do not complete all work at once using tools, but execute step by step, and then execute the next step after each step is completed.\n' +
           '*Please provide professional programming advice and solutions based on the user\'s specific needs.*\n\n' +
           '# Execution environment\n' +
           '- Current working directory: {cwd}\n' +
@@ -155,19 +167,19 @@ export const en: Messages = {
         timeLocale: 'en-US'
       },
       tokenUsage: {
-        droppedMessages: '⚠️  Dropped {count} earlier messages to stay within token limit',
-        tokenStats: '📊 Token usage: {used}/{max} ({percentage}%)',
-        nearLimit: '⚠️  Token usage approaching limit',
-        overLimit: '❌ Token limit exceeded'
+        droppedMessages: '◉ Dropped {count} earlier messages to stay within token limit',
+        tokenStats: '◈ Token usage: {used}/{max} ({percentage}%)',
+        nearLimit: '☆ Token usage approaching limit',
+        overLimit: '✖ Token limit exceeded'
       },
       toolCall: {
-        calling: '🛠️ Calling tool: {name}',
+        calling: '◆ Calling tool: {name}',
         receiving: 'Receiving tool call...',
-        success: '✅ Tool call successful',
-        failed: '❌ Tool call failed: {error}',
-        handle: '⚠️ This function requires manual confirmation to execute',
-        rejected: '❌ User rejected to execute this function',
-        approved: '✅ User confirmed to execute this function',
+        success: '★ Tool call successful',
+        failed: '✖ Tool call failed: {error}',
+        handle: '☆ This function requires manual confirmation to execute',
+        rejected: '✖ User rejected to execute this function',
+        approved: '★ User confirmed to execute this function',
         confirm: 'Do you want to execute this function?',
         confirmOptions: '[y]yes  [n]no  [Enter]default(yes)',
         pleaseSelect: 'Please select: '
@@ -267,7 +279,7 @@ export const en: Messages = {
       fileSearchTip: 'Tip: Use @ symbol to search and select files',
       messageCount: 'messages',
       exportFailedDirectExit: 'Export failed, exiting directly',
-      fileImportWaiting: '🔍 You can now type @ to search files, or directly type file path',
+      fileImportWaiting: '◐ You can now type @ to search files, or directly type file path',
       fileImportWaitingTip: '   Type anything else to cancel file import mode',
       fileImportCancelled: 'File import mode cancelled',
       selectJsonFileOnly: 'Please select .json format history file',

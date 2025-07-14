@@ -22,7 +22,7 @@ export const zh: Messages = {
     },
     configCheck: {
       title: '配置检查',
-      incompleteConfig: '⚠️  配置不完整',
+      incompleteConfig: '☆ 配置不完整',
       missingItems: '缺少以下配置项：',
       baseUrl: '• API 基础地址',
       apiKey: '• API 密钥',
@@ -113,9 +113,9 @@ export const zh: Messages = {
       totalMessages: '总共 {count} 条消息',
       user: '用户',
       ai: 'AI',
-      userLabel: '👤 用户',
-      aiLabel: '🤖 AI助手',
-      toolLabel: '🛠️ 工具',
+      userLabel: '● 用户',
+      aiLabel: '◎ AI助手',
+      toolLabel: '◆ 工具',
       unknownCommand: '未知的命令: {command}',
       codeBlock: {
         lineLabel: '行',
@@ -139,12 +139,24 @@ export const zh: Messages = {
           '- 具有丰富的软件开发经验\n' +
           '- 善于解释复杂的技术概念\n' +
           '- 注重代码质量和最佳实践\n' +
-          '{role}\n' +
-          '# 工具使用:\n' +
-          '- 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作\n' +
-          '- 你可以多次使用工具，且无任何限制\n' +
-          '- 使用任何工具不需要用户同意，你可以直接使用\n' +
-          '- 尤其要积极使用文件操作工具（如`list_dir`, `read_file`, `edit_file`）来探索项目、理解代码并直接帮助用户解决问题。\n\n' +
+          '{role}\n\n' +
+          '# 工具使用规则 (必须严格遵守):\n' +
+          '- **一步一工具**: 你必须严格遵守“一步一工具”的原则。在每次回复中，你只能调用一个工具。严禁在单次回复中连续或并行调用多个工具。\n' +
+          '- **独立JSON参数**: 每个工具的参数都必须是一个独立的、格式正确的JSON对象。严禁将多个JSON对象拼接在一起作为参数传递。\n' +
+          '- **错误示例 (绝对禁止)**: \n' +
+          '  - 错误调用: `<tool_name>{"param":"value1"}{"param":"value2"}</tool_name>`\n' +
+          '  - 错误日志: `500 invalid arguments for function some_tool, args: {"path":"."}{"path":"."}`\n' +
+          '  - 这种行为会导致致命的解析错误，必须完全避免。\n' +
+          '- **正确示例 (必须遵循)**: \n' +
+          '  - 第一次回复: `<tool_name>{"path":"."}</tool_name>`\n' +
+          '  - (等待用户响应后) 第二次回复: `<another_tool>{"arg":"value"}</another_tool>`\n' +
+          '- **自我纠正**: 如果你发现自己或系统产生了类似上述错误示例的输出，你必须立即停止并纠正你的行为，严格遵循“一步一工具”和“独立JSON参数”的规则。\n\n' +
+          '# 原始工具使用说明:\n' +
+          '- 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作。\n' +
+          '- 你可以多次使用工具，且无任何限制。\n' +
+          '- 使用任何工具不需要用户同意，你可以直接使用。\n' +
+          '- 尤其要积极使用文件操作工具（如`list_dir`, `read_file`, `edit_file`）来探索项目、理解代码并直接帮助用户解决问题。\n' +
+          '- Step By Step 执行原则，不要一次性用工具完成所有工作，而是分步执行，每步完成后，再执行下一步。\n' +
           '*请根据用户的具体需求提供专业的编程建议和解决方案。*\n\n' +
           '# 执行环境\n' +
           '- 当前工作目录: {cwd}\n' +
@@ -155,19 +167,19 @@ export const zh: Messages = {
         timeLocale: 'zh-CN'
       },
       tokenUsage: {
-        droppedMessages: '⚠️  为保持在Token限制内，已丢弃 {count} 条较早的消息',
-        tokenStats: '📊 Token使用情况: {used}/{max} ({percentage}%)',
-        nearLimit: '⚠️  Token使用接近限制',
-        overLimit: '❌ Token超出限制'
+        droppedMessages: '◉ 为保持在Token限制内，已丢弃 {count} 条较早的消息',
+        tokenStats: '◈ Token使用情况: {used}/{max} ({percentage}%)',
+        nearLimit: '☆ Token使用接近限制',
+        overLimit: '✖ Token超出限制'
       },
       toolCall: {
-        calling: '🛠️ 调用工具: {name}',
+        calling: '◆ 调用工具: {name}',
         receiving: '正在接收工具调用...',
-        success: '✅ 工具调用成功',
-        failed: '❌ 工具调用失败: {error}',
-        handle: '⚠️ 此函数需要手动确认才能执行',
-        rejected: '❌ 用户拒绝执行此函数',
-        approved: '✅ 用户确认执行此函数',
+        success: '★ 工具调用成功',
+        failed: '✖ 工具调用失败: {error}',
+        handle: '☆ 此函数需要手动确认才能执行',
+        rejected: '✖ 用户拒绝执行此函数',
+        approved: '★ 用户确认执行此函数',
         confirm: '是否执行此函数？',
         confirmOptions: '[y]是  [n]否  [Enter]默认(是)',
         pleaseSelect: '请选择: '
@@ -267,7 +279,7 @@ export const zh: Messages = {
       fileSearchTip: '提示：使用 @ 符号可以搜索和选择文件',
       messageCount: '条消息',
       exportFailedDirectExit: '导出失败，直接退出',
-      fileImportWaiting: '🔍 现在您可以输入 @ 开始搜索文件，或直接输入文件路径',
+      fileImportWaiting: '◐ 现在您可以输入 @ 开始搜索文件，或直接输入文件路径',
       fileImportWaitingTip: '   输入其他内容将取消文件导入模式',
       fileImportCancelled: '已取消文件导入模式',
       selectJsonFileOnly: '请选择 .json 格式的历史记录文件',

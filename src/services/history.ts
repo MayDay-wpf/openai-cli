@@ -277,8 +277,8 @@ export class HistoryService {
             data.messages.every((msg: any) =>
                 msg &&
                 typeof msg === 'object' &&
-                (msg.type === 'user' || msg.type === 'ai') &&
-                typeof msg.content === 'string' &&
+                (msg.type === 'user' || msg.type === 'ai' || msg.type === 'tool') &&
+                (typeof msg.content === 'string' || typeof msg.content === 'object') &&
                 (typeof msg.timestamp === 'string' || msg.timestamp instanceof Date)
             )
         );

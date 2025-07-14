@@ -9,6 +9,7 @@ export interface Message {
     timestamp: Date;
     tool_calls?: any[];
     tool_call_id?: string;
+    name?: string; // For tool calls
 }
 
 export interface TokenCalculationResult {
@@ -97,6 +98,25 @@ export class TokenCalculator {
 
         // 计算系统消息的tokens
         const systemTokens = this.calculateTokens(systemMessage) + 4; // 加上角色开销
+
+        // 首先计算所有消息的总token
+        let totalOriginalTokens = systemTokens;
+        messages.forEach(msg => {
+            totalOriginalTokens += this.calculateTokens(msg.content) + 4; // 加上角色开销
+        });
+
+        // 如果总token未超过限制，则返回所有消息，不进行压缩
+        if (totalOriginalTokens <= maxAllowedTokens) {
+            return {
+                totalTokens: totalOriginalTokens,
+                maxAllowedTokens,
+                allowedMessages: messages,
+                droppedCount: 0
+            };
+        }
+
+        console.log(`--- History token limit exceeded (${totalOriginalTokens} > ${maxAllowedTokens}), compressing... ---`);
+
 
         // 如果系统消息就超过限制，返回空结果
         if (systemTokens >= maxAllowedTokens) {

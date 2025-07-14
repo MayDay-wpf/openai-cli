@@ -348,6 +348,10 @@ export class StorageService {
       'file-system': {
         transport: 'builtin',
         description: 'Unified file system service for reading, creating, editing, and managing files and directories'
+      },
+      'todos': {
+        transport: 'builtin',
+        description: 'Service for creating and managing a list of tasks (todos) to plan and track work.'
       }
     };
   }

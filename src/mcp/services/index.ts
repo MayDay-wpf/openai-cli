@@ -4,21 +4,38 @@ export { FileSystemService } from './file-system';
 // 服务注册表
 import { BaseMCPService } from '../base-service';
 import { FileSystemService } from './file-system';
+import { TodosService } from './todos-service';
 
-export const MCPServices = {
-  'file-system': FileSystemService
-} as const;
+export { TodosService };
 
-// 获取所有可用的MCP服务
-export function getAllMCPServices(): Record<string, typeof BaseMCPService> {
-  return MCPServices;
+export const services = [
+    new FileSystemService(),
+    new TodosService(),
+];
+
+export function getServices() {
+    return services;
 }
 
-// 创建服务实例
-export function createMCPService(serviceName: keyof typeof MCPServices): BaseMCPService {
-  const ServiceClass = MCPServices[serviceName];
-  if (!ServiceClass) {
-    throw new Error(`未知的MCP服务: ${serviceName}`);
-  }
-  return new ServiceClass();
+export function getService(name: string) {
+    return services.find(s => s.getServiceInfo().name === name) || null;
+}
+
+export async function getAllToolDefinitions() {
+    let allTools: any[] = [];
+    for (const service of services) {
+        const serviceInfo = service.getServiceInfo();
+        const tools = serviceInfo.tools.map(tool => {
+            return {
+                type: 'function',
+                function: {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.inputSchema,
+                }
+            };
+        });
+        allTools = allTools.concat(tools);
+    }
+    return allTools;
 } 

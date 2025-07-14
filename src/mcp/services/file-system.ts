@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { createPatch } from 'diff';
 import { BaseMCPService } from '../base-service';
 import {
     CreateDirectoryParams,
@@ -69,7 +70,7 @@ export class FileSystemService extends BaseMCPService {
             // File operation tools
             {
                 name: 'create_file',
-                description: 'Create a new file with optional content. This is useful for adding new features or modules to the project. Parent directories will be created if they do not exist.',
+                description: 'Create a new file with optional content. This is useful for adding new features or modules to the project. Parent directories will be created if they do not exist. If the file content is large, you can create part of the content first, and then call the `edit_file` tool to edit the file.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -133,7 +134,7 @@ export class FileSystemService extends BaseMCPService {
             // File editing tool
             {
                 name: 'edit_file',
-                description: 'Edit a file by replacing a specific range of lines with new content. This is the primary tool for modifying existing code. First, read the file to get the line numbers, then call this tool.',
+                description: 'Edit a file by replacing a specific range of lines with new content. This is the primary tool for modifying existing code. To avoid errors, it is recommended to break down large edits into several smaller, sequential calls. First, read the file to get the line numbers, then call this tool.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -349,10 +350,10 @@ export class FileSystemService extends BaseMCPService {
             fs.writeFileSync(targetPath, content, encoding as BufferEncoding);
             const stats = fs.statSync(targetPath);
 
+            const diff = createPatch(targetPath, '', content);
             const resultMessage = `✅ **File created successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Content:** ${content.length > 0 ? `${content.length} characters` : 'Empty file'}\n${parentCreated ? '**Parent directories:** Created automatically\n' : ''}\n*File is ready for use.*`;
-
-            return this.createSuccessResponse(request.id, resultMessage);
-
+            
+            return this.createSuccessResponse(request.id, { message: resultMessage, diff });
         } catch (error) {
             return this.handleFileOperationError(request.id, 'create_file', params.path, error);
         }
@@ -516,39 +517,14 @@ export class FileSystemService extends BaseMCPService {
             // Write the edited content back to the file
             fs.writeFileSync(targetPath, editedContent, encoding as BufferEncoding);
 
-            // Calculate context range (30-50 lines around the edit)
-            const contextRadius = 40; // 40 lines before and after for good context
-            const editStartIndex = params.startLine - 1;
-            const editEndIndex = editStartIndex + newContentLines.length - 1;
-
-            const contextStart = Math.max(0, editStartIndex - contextRadius);
-            const contextEnd = Math.min(editedLines.length - 1, editEndIndex + contextRadius);
-
-            // Generate context content with line numbers
-            const contextLines = editedLines.slice(contextStart, contextEnd + 1);
-            const contextContent = contextLines
-                .map((line, index) => {
-                    const lineNum = contextStart + index + 1;
-                    const isEdited = lineNum >= params.startLine && lineNum <= (params.startLine + newContentLines.length - 1);
-                    const marker = isEdited ? '→' : ' ';
-                    return `${marker}${lineNum.toString().padStart(4, ' ')}: ${line}`;
-                })
-                .join('\n');
-
-            // Generate edited content with line numbers (just the edited section)
-            const editedContentWithLines = newContentLines
-                .map((line, index) => {
-                    const lineNum = params.startLine + index;
-                    return `→${lineNum.toString().padStart(4, ' ')}: ${line}`;
-                })
-                .join('\n');
+            const diff = createPatch(targetPath, originalContent, editedContent);
 
             const linesChanged = params.endLine - params.startLine + 1;
             const newTotalLines = editedLines.length;
 
-            const resultMessage = `✅ **File edited successfully**\n\n**File:** \`${targetPath}\`\n**Lines edited:** ${params.startLine}-${params.endLine} (${linesChanged} lines)\n**New content:** ${newContentLines.length} lines\n**Total lines:** ${totalLines} → ${newTotalLines}\n\n**Edited section:**\n\`\`\`\n${editedContentWithLines}\n\`\`\`\n\n**Context for verification:**\n\`\`\`\n${contextContent}\n\`\`\`\n\n**ACTION REQUIRED:** Please verify this edit is correct and respond with "√checked" if successful, or call edit_file again if corrections are needed.`;
+            const resultMessage = `✅ **File edited successfully**\n\n**File:** \`${targetPath}\`\n**Lines edited:** ${params.startLine}-${params.endLine} (${linesChanged} lines)\n**New content:** ${newContentLines.length} lines\n**Total lines:** ${totalLines} → ${newTotalLines}\n\n**CRITICAL ACTION: VERIFY THE EDIT.**\n1.  **Examine the diff below.**\n2.  **Confirm the change is 100% correct and as intended.**\n3.  **If correct, you MUST reply with the word "√checked".**\n4.  **If incorrect, you MUST call \`edit_file\` again to make corrections.**\n\n**DO NOT proceed with other tasks until you have verified this edit.**`;
 
-            return this.createSuccessResponse(request.id, resultMessage);
+            return this.createSuccessResponse(request.id, { message: resultMessage, diff });
 
         } catch (error) {
             return this.handleFileEditError(request.id, params.path, error);

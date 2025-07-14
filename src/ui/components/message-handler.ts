@@ -2,15 +2,17 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import { marked } from 'marked';
 import * as path from 'path';
+import { highlight } from 'cli-highlight';
+import { createPatch } from 'diff';
+import { TodosService } from '../../mcp/services';
 import { languageService } from '../../services/language';
 import { ChatMessage, openAIService } from '../../services/openai';
 import { StorageService } from '../../services/storage';
 import { SystemDetector } from '../../services/system-detector';
 import { Messages } from '../../types/language';
-import { AnimationUtils, LoadingController, TokenCalculator } from '../../utils';
+import { AnimationUtils, LoadingController } from '../../utils';
 import type { Message } from '../../utils/token-calculator';
-// cli-highlight的正确导入方式
-const { highlight } = require('cli-highlight');
+import { StreamRenderer } from './stream-renderer';
 
 export interface ChatState {
     canSendMessage: boolean;
@@ -28,300 +30,6 @@ export interface MessageHandlerCallbacks {
     getSystemDetector: () => SystemDetector;
 }
 
-/**
- * 流式渲染器，用于处理流式输入并进行美观输出
- */
-class StreamRenderer {
-    private buffer: string = '';
-    private isInCodeBlock: boolean = false;
-    private codeBlockLanguage: string = '';
-    private codeBlockContent: string = '';
-    private currentLine: string = '';
-    private codeLineNumber: number = 1;
-
-    // 支持的语言列表（常见的编程语言）
-    private supportedLanguages = new Set([
-        'javascript', 'js', 'typescript', 'ts', 'python', 'py', 'java',
-        'cpp', 'c++', 'c', 'csharp', 'cs', 'php', 'ruby', 'go',
-        'rust', 'swift', 'kotlin', 'scala', 'sql', 'html', 'css',
-        'scss', 'sass', 'less', 'xml', 'json', 'yaml', 'yml',
-        'bash', 'sh', 'shell', 'powershell', 'dockerfile', 'makefile',
-        'perl', 'lua', 'r', 'matlab', 'objective-c', 'dart', 'elixir',
-        'erlang', 'haskell', 'clojure', 'groovy', 'actionscript'
-    ]);
-
-    constructor() {
-        // 配置marked选项
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-        });
-    }
-
-    /**
-     * 检查语言是否被支持，如果不支持则返回默认配置
-     */
-    private checkLanguageSupport(language: string): { isSupported: boolean; fallbackLanguage?: string } {
-        if (!language || language.trim() === '') {
-            return { isSupported: false };
-        }
-
-        const normalizedLang = language.toLowerCase().trim();
-
-        // 处理一些特殊的语言别名
-        const languageAliases: { [key: string]: string } = {
-            'vue': 'html',  // Vue文件可以用HTML高亮作为回退
-            'jsx': 'javascript',
-            'tsx': 'typescript',
-            'vue.js': 'html',
-            'vuejs': 'html',
-            'svelte': 'html',
-            'angular': 'typescript',
-            'react': 'javascript'
-        };
-
-        // 检查是否有别名映射
-        if (languageAliases[normalizedLang]) {
-            return { isSupported: true, fallbackLanguage: languageAliases[normalizedLang] };
-        }
-
-        // 检查是否直接支持
-        if (this.supportedLanguages.has(normalizedLang)) {
-            return { isSupported: true };
-        }
-
-        return { isSupported: false };
-    }
-
-    /**
-     * 处理流式输入的文本块
-     */
-    processChunk(chunk: string): string {
-        let output = '';
-        this.buffer += chunk;
-
-        // 按换行符分割处理
-        const lines = this.buffer.split('\n');
-
-        // 保留最后一行（可能不完整）
-        this.buffer = lines.pop() || '';
-
-        // 处理完整的行
-        for (const line of lines) {
-            output += this.processLine(line + '\n');
-        }
-
-        return output;
-    }
-
-    /**
- * 处理单行文本
- */
-    private processLine(line: string): string {
-        const cleanLine = line.replace('\n', '');
-
-        // 检测代码块开始/结束
-        if (cleanLine.startsWith('```')) {
-            if (!this.isInCodeBlock) {
-                // 代码块开始
-                this.isInCodeBlock = true;
-                this.codeBlockLanguage = cleanLine.substring(3).trim();
-                this.codeBlockContent = '';
-                this.codeLineNumber = 1;
-
-                // 显示代码块头部
-                const messages = languageService.getMessages();
-                const language = this.codeBlockLanguage || messages.main.messages.codeBlock.unknownLanguage;
-                const terminalWidth = process.stdout.columns || 120;
-                const languageLabel = ` ${language.toUpperCase()} `;
-                const remainingWidth = terminalWidth - languageLabel.length;
-
-                return chalk.bgBlue.white.bold(languageLabel) + chalk.blue('─'.repeat(Math.max(0, remainingWidth))) + '\n';
-            } else {
-                // 代码块结束
-                this.isInCodeBlock = false;
-                this.codeBlockContent = '';
-                this.codeBlockLanguage = '';
-
-                // 显示代码块底部
-                const terminalWidth = process.stdout.columns || 120;
-                return chalk.blue('─'.repeat(terminalWidth)) + '\n';
-            }
-        }
-
-        if (this.isInCodeBlock) {
-            // 在代码块内，添加行号和背景色
-            const lineNum = this.codeLineNumber.toString().padStart(3, ' ');
-            const highlightedCode = this.highlightCodeLine(cleanLine, this.codeBlockLanguage);
-            this.codeLineNumber++;
-
-            // 获取终端宽度，默认120列
-            const terminalWidth = process.stdout.columns || 120;
-            const lineNumberWidth = 5; // 行号部分宽度 " 123 "
-            const availableWidth = terminalWidth - lineNumberWidth;
-
-            // 计算实际字符长度（去除ANSI颜色代码）
-            const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
-            const actualCodeLength = stripAnsi(highlightedCode).length;
-
-            // 确保填充到正确宽度
-            const paddingNeeded = Math.max(0, availableWidth - actualCodeLength);
-            const paddedCode = highlightedCode + ' '.repeat(paddingNeeded);
-
-            // 使用更好看的配色方案 - 根据当前行号而不是下一行
-            const isEvenLine = (this.codeLineNumber - 1) % 2 === 0;
-            const bgColor = isEvenLine ? chalk.bgHex('#2a2a2a') : chalk.bgHex('#1e1e1e');
-
-            return chalk.bgHex('#404040').white.bold(` ${lineNum} `) +
-                bgColor(paddedCode) + '\n';
-        }
-
-        // 普通文本行的美化处理
-        return this.formatRegularLine(cleanLine) + '\n';
-    }
-
-    /**
-     * 代码高亮（完整代码块）
-     */
-    private highlightCode(code: string, language: string): string {
-        const languageCheck = this.checkLanguageSupport(language);
-
-        try {
-            if (languageCheck.isSupported) {
-                const targetLanguage = languageCheck.fallbackLanguage || language;
-                return highlight(code, { language: targetLanguage });
-            } else {
-                // 不支持的语言使用黄色高亮
-                return chalk.yellow(code);
-            }
-        } catch (error) {
-            // 如果高亮失败，也使用黄色高亮
-            return chalk.yellow(code);
-        }
-    }
-
-    /**
-     * 单行代码高亮
-     */
-    private highlightCodeLine(codeLine: string, language: string): string {
-        const languageCheck = this.checkLanguageSupport(language);
-
-        try {
-            if (languageCheck.isSupported) {
-                const targetLanguage = languageCheck.fallbackLanguage || language;
-                return highlight(codeLine, { language: targetLanguage });
-            } else {
-                // 不支持的语言使用黄色高亮
-                return chalk.yellow(codeLine);
-            }
-        } catch (error) {
-            // 如果高亮失败，也使用黄色高亮
-            return chalk.yellow(codeLine);
-        }
-    }
-
-    /**
-     * 格式化普通文本行
-     */
-    private formatRegularLine(line: string): string {
-        const messages = languageService.getMessages();
-
-        // 处理标题
-        if (line.startsWith('# ')) {
-            return chalk.bold.cyan(line);
-        } else if (line.startsWith('## ')) {
-            return chalk.bold.blue(line);
-        } else if (line.startsWith('### ')) {
-            return chalk.bold.magenta(line);
-        } else if (line.startsWith('#### ')) {
-            return chalk.bold.yellow(line);
-        }
-
-        // 处理列表项
-        if (line.match(/^[\s]*[-*+]\s/)) {
-            return chalk.green(line);
-        }
-
-        // 处理数字列表
-        if (line.match(/^[\s]*\d+\.\s/)) {
-            return chalk.cyan(line);
-        }
-
-        // 处理行内代码
-        line = line.replace(/`([^`]+)`/g, (match, code) => {
-            return chalk.yellow.bgBlack(` ${code} `);
-        });
-
-        // 处理加粗文本
-        line = line.replace(/\*\*([^*]+)\*\*/g, (match, text) => {
-            return chalk.bold(text);
-        });
-
-        // 处理斜体文本
-        line = line.replace(/\*([^*]+)\*/g, (match, text) => {
-            return chalk.italic(text);
-        });
-
-        // 处理链接
-        line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
-            return chalk.blue.underline(text) + chalk.dim(` (${url})`);
-        });
-
-        // 粗体和斜体
-        line = line.replace(/\*\*\*([^\*]+)\*\*\*/g, chalk.bold.italic('$1'));
-        line = line.replace(/\*\*([^\*]+)\*\*/g, chalk.bold('$1'));
-        line = line.replace(/\*([^\*]+)\*/g, chalk.italic('$1'));
-
-        return line;
-    }
-
-    /**
-     * 获取MIME类型
-     */
-    private getMimeType(extension: string): string | null {
-        const mimeTypes: { [key: string]: string } = {
-            '.png': 'image/png',
-            '.jpeg': 'image/jpeg',
-            '.jpg': 'image/jpeg',
-            '.webp': 'image/webp',
-            '.gif': 'image/gif',
-        };
-        return mimeTypes[extension] || null;
-    }
-
-    /**
- * 完成处理，处理缓冲区中剩余的内容
- */
-    finalize(): string {
-        if (this.buffer.length > 0) {
-            const result = this.processLine(this.buffer + '\n');
-            this.buffer = '';
-            return result;
-        }
-
-        // 如果还在代码块中，重置状态（因为现在是按行处理的）
-        if (this.isInCodeBlock) {
-            this.isInCodeBlock = false;
-            this.codeBlockContent = '';
-            this.codeBlockLanguage = '';
-        }
-
-        return '';
-    }
-
-    /**
-     * 重置渲染器状态
-     */
-    reset(): void {
-        this.buffer = '';
-        this.isInCodeBlock = false;
-        this.codeBlockLanguage = '';
-        this.codeBlockContent = '';
-        this.currentLine = '';
-        this.codeLineNumber = 1;
-    }
-}
-
 export class MessageHandler {
     private currentMessages: Messages;
     private callbacks: MessageHandlerCallbacks;
@@ -337,8 +45,6 @@ export class MessageHandler {
             this.currentMessages = languageService.getMessages();
         });
     }
-
-
 
     updateLanguage(messages: Messages): void {
         this.currentMessages = messages;
@@ -371,15 +77,17 @@ export class MessageHandler {
 
         if (message.type === 'user') {
             // 美化用户消息标签
-            const userPrefix = chalk.bgBlue.white.bold(` ${messages.main.messages.userLabel} `) + chalk.blue(` ${timeStr} `);
+            const userColor = chalk.hex('#4F46E5');
+            const userPrefix = chalk.bgHex('#4F46E5').white.bold(` ${messages.main.messages.userLabel} `) + userColor(` ${timeStr} `);
             process.stdout.write(userPrefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.displayContent || message.content) + '\n\n');
         } else if (message.type === 'ai' || message.type === 'tool') {
             // 美化AI或工具消息标签
             const isTool = message.type === 'tool';
             const label = isTool ? messages.main.messages.toolLabel : messages.main.messages.aiLabel;
-            const bgColor = isTool ? chalk.bgYellow.black : chalk.bgGreen.white;
+            const aiColor = chalk.hex('#059669');
+            const bgColor = isTool ? chalk.bgYellow.black : chalk.bgHex('#059669').white;
 
-            const prefix = bgColor.bold(` ${label} `) + chalk.green(` ${timeStr} `);
+            const prefix = bgColor.bold(` ${label} `) + aiColor(` ${timeStr} `);
             process.stdout.write(prefix + '\n');
 
             // 重置渲染器并处理完整内容
@@ -403,7 +111,8 @@ export class MessageHandler {
         });
 
         // 美化AI回复标签
-        const aiPrefix = chalk.bgGreen.white.bold(` ${messages.main.messages.aiLabel} `) + chalk.green(` ${timeStr} `);
+        const aiColor = chalk.hex('#059669');
+        const aiPrefix = chalk.bgHex('#059669').white.bold(` ${messages.main.messages.aiLabel} `) + aiColor(` ${timeStr} `);
 
         // 使用流式渲染器处理内容
         this.streamRenderer.reset();
@@ -429,9 +138,83 @@ export class MessageHandler {
     }
 
     /**
+     * 构建系统消息
+     */
+    private buildSystemMessage(langMessages: Messages, selectedTextFiles: string[]): string {
+        const apiConfig = StorageService.getApiConfig();
+
+        // 构建系统消息
+        const cwd = process.cwd();
+        const currentTime = new Date().toLocaleTimeString(langMessages.main.messages.format.timeLocale, {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        });
+
+        const promptParts = [
+            langMessages.main.messages.system.basePrompt
+                .replace('{role}', apiConfig.role || '')
+                .replace('{cwd}', cwd)
+                .replace('{time}', currentTime)
+        ];
+
+        if (apiConfig.role) {
+            promptParts.push(apiConfig.role);
+        }
+
+        // Add Todos prompt
+        const todos = TodosService.getTodos();
+        const pendingTodos = todos.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
+
+        if (pendingTodos.length > 0) {
+            const todoListString = pendingTodos.map(t => {
+                const statusIcon = t.status === 'in_progress' ? '▶️' : '⚪️';
+                return `${statusIcon} ${t.content} (id: ${t.id})`;
+            }).join('\n');
+
+            const todoPrompt = `You are in the middle of a multi-step task. You MUST follow the plan in the todo list.
+1. Identify the next 'pending' task.
+2. Execute the task using the appropriate tool(s).
+3. IMMEDIATELY after successful execution, call the 'update_todos' tool to mark the task as 'completed'.
+This entire sequence (execute and update) should happen in a single response. Do not ask for permission, just proceed.
+
+Current Todos:
+${todoListString}`;
+            promptParts.push(todoPrompt);
+        } else {
+            const programmingTaskPrompt = `**important : If the user's request involves a programming task, you MUST first use the 'create_todos' tool to generate a comprehensive, step-by-step plan.**`;
+            promptParts.push(programmingTaskPrompt);
+        }
+
+        // Add a general rule for tool verification
+        const toolVerificationPrompt = `**General Tool Interaction Rule:**
+Some tools, especially for file editing, will return a "CRITICAL ACTION" or "ACTION REQUIRED" message asking you to verify the result.
+When you see such a message, you MUST:
+1.  Pause your current task plan (including any todos).
+2.  Carefully review the output provided by the tool.
+3.  Respond with "√checked" if the action was successful and correct.
+4.  If it's incorrect, call the tool again with the necessary corrections.
+**Verification is your highest priority.** Do not proceed until you have confirmed the tool's action.`;
+        promptParts.push(toolVerificationPrompt);
+
+        if (selectedTextFiles.length > 0) {
+            const fileList = selectedTextFiles.map(file => `- ${file}`).join('\n');
+            promptParts.push(
+                langMessages.main.messages.system.fileReferencePrompt
+                    .replace('{fileList}', fileList)
+            );
+        }
+        return promptParts.join('\n\n');
+    }
+
+    /**
      * 处理AI请求的主要逻辑
      */
-    async processAIRequest(): Promise<void> {
+    async processAIRequest(isContinuation: boolean = false): Promise<void> {
+        if (!isContinuation) {
+            // Clear todos at the beginning of a new user-initiated task.
+            TodosService.clearTodos();
+        }
+
         const messages = languageService.getMessages();
 
         // 检查API配置
@@ -459,7 +242,7 @@ export class MessageHandler {
         const startLoading = () => {
             if (!isLoading) {
                 const loadingController = AnimationUtils.showLoadingAnimation({
-                    text: messages.main.status.thinking
+                    text: '' // messages.main.status.thinking
                 });
                 this.callbacks.onLoadingStart(loadingController);
                 isLoading = true;
@@ -469,6 +252,8 @@ export class MessageHandler {
         let isFirstChunk = true;
         const resetForNewResponse = () => {
             isFirstChunk = true;
+            // Also reset the stream renderer to ensure a clean slate for the new response
+            this.streamRenderer.reset();
         };
 
         startLoading(); // 首次启动加载动画
@@ -489,6 +274,9 @@ export class MessageHandler {
             await openAIService.streamChat({
                 messages: chatMessages,
                 tools: tools.length > 0 ? tools : undefined,
+                onReasoningChunk: (chunk: string) => {
+                    // No longer displaying reasoning to keep the output clean.
+                },
                 onToolChunk: (toolChunk) => {
                     // 保持加载动画
                 },
@@ -499,7 +287,7 @@ export class MessageHandler {
                     if (finalContent) {
                         process.stdout.write(finalContent);
                     }
-                    process.stdout.write('\n\n');
+                    // process.stdout.write('\n\n'); // 移除，避免在工具调用中间中断消息流
 
                     const aiMessage: Message = {
                         type: 'ai',
@@ -513,19 +301,22 @@ export class MessageHandler {
                 },
                 onToolCall: async (toolCall: any) => {
                     // onAssistantMessage 已经停止了动画，这里执行工具调用
-                    // handleToolCall 会在执行后重新启动动画并重置状态
-                    return await this.handleToolCall(toolCall, startLoading, resetForNewResponse);
+                    const result = await this.handleToolCall(toolCall);
+                    // 关键改动：在工具调用完成后，立即为下一轮AI响应重置状态
+                    resetForNewResponse();
+                    startLoading(); // 为下一轮AI思考重新启动加载动画
+                    return result;
                 },
                 onChunk: (chunk: string) => {
+                    stopLoading();
                     if (isFirstChunk) {
-                        stopLoading(); // 在渲染第一个数据块前停止动画
-
                         // 显示AI回复标签
                         const timeStr = new Date().toLocaleTimeString(messages.main.messages.format.timeLocale, {
                             hour: '2-digit',
                             minute: '2-digit'
                         });
-                        const aiPrefix = chalk.bgGreen.white.bold(` ${messages.main.messages.aiLabel} `) + chalk.green(` ${timeStr} `);
+                        const aiColor = chalk.hex('#059669');
+                        const aiPrefix = chalk.bgHex('#059669').white.bold(` ${messages.main.messages.aiLabel} `) + aiColor(` ${timeStr} `);
                         process.stdout.write(aiPrefix + '\n');
                         isFirstChunk = false;
                     }
@@ -535,29 +326,40 @@ export class MessageHandler {
                         process.stdout.write(formattedChunk);
                     }
                     aiResponseContent += chunk;
+                    startLoading();
                 },
                 onComplete: (fullResponse: string) => {
                     stopLoading(); // 确保流程结束时动画已停止
-
-                    if (assistantMessageDisplayed) {
-                        this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
-                        return;
-                    }
 
                     const finalContent = this.streamRenderer.finalize();
                     if (finalContent) {
                         process.stdout.write(finalContent);
                     }
-                    process.stdout.write('\n\n');
 
-                    const aiMessage: Message = {
-                        type: 'ai',
-                        content: fullResponse,
-                        displayContent: fullResponse,
-                        timestamp: new Date()
-                    };
-                    this.callbacks.addMessage(aiMessage);
-                    this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
+                    // If there was any streamed output or a final response, add newlines for spacing.
+                    if (finalContent || fullResponse) {
+                        process.stdout.write('\n\n');
+                    }
+
+                    // BUGFIX: The original code failed to save the final AI message if a tool call had occurred.
+                    // This is now corrected by removing the `!assistantMessageDisplayed` check and saving
+                    // the final response whenever it's not empty.
+                    if (fullResponse) {
+                        const aiMessage: Message = {
+                            type: 'ai',
+                            content: fullResponse,
+                            displayContent: fullResponse,
+                            timestamp: new Date()
+                        };
+                        this.callbacks.addMessage(aiMessage);
+                    }
+
+                    // Check if we need to continue the task
+                    if (!TodosService.areAllTodosCompleted()) {
+                        setTimeout(() => this.processAIRequest(true), 100);
+                    } else {
+                        this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
+                    }
                 },
                 onError: (error: Error) => {
                     stopLoading(); // 出错时停止动画
@@ -603,7 +405,7 @@ export class MessageHandler {
     /**
      * 处理工具调用
      */
-    private async handleToolCall(toolCall: any, startLoading: () => void, resetForNewResponse: () => void): Promise<any> {
+    private async handleToolCall(toolCall: any): Promise<any> {
         try {
             const messages = languageService.getMessages();
             const functionName = toolCall.function.name;
@@ -612,80 +414,64 @@ export class MessageHandler {
             console.log(chalk.cyan(messages.main.messages.toolCall.calling.replace('{name}', functionName)));
 
             // 截断并打印参数，防止过长的参数刷屏
-            const paramsString = JSON.stringify(parameters, null, 2);
-            if (paramsString !== '{}') { // 只在有参数时打印
-                const truncatedParams = paramsString.length > 100 ? `${paramsString.substring(0, 100)}...` : paramsString;
-                console.log(chalk.gray(`parameters: ${truncatedParams}`));
-            }
+            // const paramsString = JSON.stringify(parameters, null, 2);
+            // if (paramsString !== '{}') { // 只在有参数时打印
+            //     const truncatedParams = paramsString.length > 100 ? `${paramsString.substring(0, 100)}...` : paramsString;
+            //     console.log(chalk.gray(`parameters: ${truncatedParams}`));
+            // }
 
             // 检查是否需要用户确认
             const needsConfirmation = StorageService.isFunctionConfirmationRequired(functionName);
 
             if (needsConfirmation) {
-                // 显示函数信息并询问用户是否执行
-                console.log();
-                console.log(chalk.yellow(messages.main.messages.toolCall.handle));
-                console.log(chalk.white(`tool: ${chalk.bold(functionName)}`));
-                console.log(chalk.white(`parameters: ${chalk.gray(JSON.stringify(parameters, null, 2))}`));
-                console.log();
+                let diff: string | undefined;
+                // For file operations, generate a diff before asking for confirmation
+                if (functionName === 'file-system_create_file' || functionName === 'file-system_edit_file') {
+                    const targetPath = path.resolve(parameters.path);
+                    let originalContent = '';
+                    if (fs.existsSync(targetPath)) {
+                        originalContent = fs.readFileSync(targetPath, 'utf8');
+                    }
+                    const newContent = parameters.content || parameters.newContent || '';
+                    diff = createPatch(targetPath, originalContent, newContent);
+                }
 
-                const shouldExecute = await this.askUserConfirmation(functionName, parameters);
+                const shouldExecute = await this.askUserConfirmation(functionName, parameters, diff);
 
                 if (!shouldExecute) {
                     // 用户拒绝执行
-                    const rejectionMessage = `❌ **Tool Rejected: ${functionName}**\n\n${messages.main.messages.toolCall.rejected}\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(parameters, null, 2)}\n\`\`\``;
-
-                    const toolRejectedMessage: Message = {
-                        type: 'tool',
-                        tool_call_id: toolCall.id,
-                        content: {
-                            error: messages.main.messages.toolCall.rejected,
-                            rejected: true,
-                            functionName: functionName,
-                        },
-                        displayContent: rejectionMessage,
-                        timestamp: new Date()
-                    };
-                    this.callbacks.addMessage(toolRejectedMessage);
-
+                    const rejectionMessage = `User rejected the tool call: ${functionName}`;
                     console.log(chalk.yellow(messages.main.messages.toolCall.rejected));
 
                     // 返回拒绝信息给AI
                     return {
-                        error: messages.main.messages.toolCall.rejected,
-                        rejected: true,
-                        functionName: functionName,
-                        reason: messages.main.messages.toolCall.rejected
+                        tool_call_id: toolCall.id,
+                        error: rejectionMessage,
                     };
                 }
-
                 console.log(chalk.green(messages.main.messages.toolCall.approved));
             }
-
-            // 将工具调用记录添加到历史记录
-            // const toolCallMessage: Message = {
-            //     type: 'ai',
-            //     content: `🛠️ **Tool Call: ${functionName}**\n\n**Parameters:**\n\`\`\`json\n${JSON.stringify(parameters, null, 2)}\n\`\`\``,
-            //     timestamp: new Date()
-            // };
-            // this.callbacks.addMessage(toolCallMessage);
 
             const systemDetector = this.callbacks.getSystemDetector();
             const result = await systemDetector.executeMcpTool(functionName, parameters);
 
-            console.log(chalk.green(messages.main.messages.toolCall.success));
+            // The system message is now built once at the start of processAIRequest
+            // and is part of the `chatMessages` array passed to the streamChat call.
+            // No need to update it here as the whole message history will be rebuilt on the next turn.
+
+            // console.log(result);
 
             // 将工具调用结果添加到历史记录
             let resultContent = '';
             if (result && typeof result === 'object') {
-                // 如果结果是文件内容或目录结构，格式化显示
-                if (result.content) {
+                if (result.diff) {
+                    const displayDiff = highlight(result.diff, { language: 'diff' });
+                    resultContent = `✅ **Tool Result: ${functionName}**\n\n${result.message || ''}\n\n${displayDiff}`;
+                } else if (result.content) {
                     resultContent = `✅ **Tool Result: ${functionName}**\n\n`;
                     if (result.structure) {
-                        // 目录结构结果
                         resultContent += result.structure;
                     } else {
-                        // 文件内容结果
                         resultContent += `**File:** ${parameters.path || 'Unknown'}\n`;
                         if (result.totalLines) {
                             resultContent += `**Lines:** ${result.lineRange?.start || 1}-${result.lineRange?.end || result.totalLines} of ${result.totalLines}\n`;
@@ -702,7 +488,6 @@ export class MessageHandler {
                         resultContent += `\n**Content:**\n\`\`\`\n${result.content}\n\`\`\``;
                     }
                 } else {
-                    // 其他类型的结果
                     resultContent = `✅ **Tool Result: ${functionName}**\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``;
                 }
             } else {
@@ -712,16 +497,12 @@ export class MessageHandler {
             const toolResultMessage: Message = {
                 type: 'tool',
                 tool_call_id: toolCall.id,
+                name: functionName, // <-- Add function name here
                 content: result, // 存储原始结果
                 displayContent: resultContent, // 存储格式化后的显示内容
                 timestamp: new Date()
             };
             this.callbacks.addMessage(toolResultMessage);
-
-            // 为AI的下一轮思考重新启动加载动画
-            startLoading();
-            // 重置状态，以便正确处理下一条流式响应
-            resetForNewResponse();
 
             return result;
         } catch (error) {
@@ -733,6 +514,7 @@ export class MessageHandler {
             const errorMessage: Message = {
                 type: 'tool',
                 tool_call_id: toolCall.id,
+                name: toolCall.function?.name || 'Unknown', // <-- Add function name here
                 content: {
                     error: errorMsg,
                     tool_call_id: toolCall.id,
@@ -751,8 +533,20 @@ export class MessageHandler {
     /**
      * 询问用户是否确认执行函数
      */
-    private async askUserConfirmation(functionName: string, parameters: any): Promise<boolean> {
+    private async askUserConfirmation(functionName: string, parameters: any, diff?: string): Promise<boolean> {
         const messages = languageService.getMessages();
+
+        console.log();
+        console.log(chalk.yellow(messages.main.messages.toolCall.handle));
+        console.log(chalk.white(`Tool: ${chalk.bold(functionName)}`));
+        console.log(chalk.white(`Parameters: ${chalk.gray(JSON.stringify(parameters, null, 2))}`));
+        
+        if (diff) {
+            console.log(chalk.yellow.bold('--- Proposed Changes ---'));
+            console.log(highlight(diff, { language: 'diff' }));
+            console.log(chalk.yellow.bold('----------------------'));
+        }
+
         return new Promise((resolve) => {
             console.log(chalk.yellow(messages.main.messages.toolCall.confirm));
             console.log(chalk.gray(messages.main.messages.toolCall.confirmOptions));
@@ -829,58 +623,48 @@ export class MessageHandler {
     private buildChatMessages(): ChatMessage[] {
         const recentMessages = this.callbacks.getRecentMessages(20);
         const systemDetector = this.callbacks.getSystemDetector();
-        const apiConfig = StorageService.getApiConfig();
         const chatMessages: ChatMessage[] = [];
         const langMessages = languageService.getMessages();
+        const selectedTextFiles = this.callbacks.getSelectedTextFiles();
 
         // 构建系统消息
-        const cwd = process.cwd();
-        const currentTime = new Date().toLocaleTimeString(langMessages.main.messages.format.timeLocale, {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-        });
-
-        const promptParts = [
-            langMessages.main.messages.system.basePrompt
-                .replace('{role}', apiConfig.role || '')
-                .replace('{cwd}', cwd)
-                .replace('{time}', currentTime)
-        ];
-
-        if (apiConfig.role) {
-            promptParts.push(apiConfig.role);
-        }
-
-        const selectedTextFiles = this.callbacks.getSelectedTextFiles();
-        if (selectedTextFiles.length > 0) {
-            const fileList = selectedTextFiles.map(file => `- ${file}`).join('\n');
-            promptParts.push(
-                langMessages.main.messages.system.fileReferencePrompt
-                    .replace('{fileList}', fileList)
-            );
-        }
-        const systemMessage = promptParts.join('\n\n');
+        const systemMessage = this.buildSystemMessage(langMessages, selectedTextFiles);
 
         if (systemMessage) {
             chatMessages.push({ role: 'system', content: systemMessage });
         }
 
-        // 转换消息历史
+        // 转换消息历史，并确保 'tool' 消息的合法性
+        let expectedToolMessages = 0;
         for (const msg of (recentMessages as any[])) {
             if (msg.type === 'user') {
-                chatMessages.push({ role: 'user', content: msg.content });
+                const userMessage: ChatMessage = { role: 'user', content: msg.content };
+                chatMessages.push(userMessage);
+                expectedToolMessages = 0;
             } else if (msg.type === 'ai') {
-                chatMessages.push({
+                const assistantMessage: ChatMessage = {
                     role: 'assistant',
-                    content: msg.content,
+                    content: msg.content || null, // Ensure content is not undefined
                     tool_calls: msg.tool_calls,
-                });
+                };
+                chatMessages.push(assistantMessage);
+                if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+                    expectedToolMessages = assistantMessage.tool_calls.length;
+                } else {
+                    expectedToolMessages = 0;
+                }
             } else if (msg.type === 'tool') {
-                chatMessages.push({
-                    role: 'tool',
-                    tool_call_id: msg.tool_call_id,
-                    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-                });
+                // 关键检查：只在期望有工具消息时才添加，防止孤立的工具消息导致API错误
+                if (expectedToolMessages > 0) {
+                    const toolMessage: ChatMessage = {
+                        role: 'tool',
+                        tool_call_id: msg.tool_call_id,
+                        name: (msg as any).name,
+                        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                    };
+                    chatMessages.push(toolMessage);
+                    expectedToolMessages--;
+                }
             }
         }
 
@@ -890,7 +674,7 @@ export class MessageHandler {
         let fileContents = '';
         if (selectedTextFiles.length > 0) {
             fileContents = selectedTextFiles
-                .map((filePath) => {
+                .map((filePath: string) => {
                     try {
                         const absolutePath = path.resolve(process.cwd(), filePath);
                         const content = fs.readFileSync(absolutePath, 'utf-8');
@@ -909,7 +693,7 @@ export class MessageHandler {
                         return '';
                     }
                 })
-                .filter(content => content)
+                .filter((content: string) => content)
                 .join('\n\n');
         }
 
@@ -959,68 +743,4 @@ export class MessageHandler {
 
         return chatMessages;
     }
-
-    /**
-     * 显示历史记录
-     */
-    showHistory(messages: Message[]): void {
-        const historyMessages = languageService.getMessages();
-
-        if (messages.length === 0) {
-            process.stdout.write(chalk.yellow(historyMessages.main.messages.noHistory + '\n'));
-            return;
-        }
-
-        process.stdout.write(chalk.bold('\n=== ' + historyMessages.main.messages.historyTitle + ' ===\n\n'));
-
-        // 显示Token使用统计
-        const selectedTextFiles = this.callbacks.getSelectedTextFiles();
-        let systemMessage = historyMessages.main.messages.system.basePrompt;
-        if (selectedTextFiles.length > 0) {
-            const fileList = selectedTextFiles.map((file: string) => `- ${file}`).join('\n');
-            systemMessage += historyMessages.main.messages.system.fileReferencePrompt.replace('{fileList}', fileList);
-        }
-
-        const stats = TokenCalculator.getContextUsageStats(messages, systemMessage, 0.8);
-        const statsMessage = historyMessages.main.messages.tokenUsage.tokenStats
-            .replace('{used}', stats.used.toString())
-            .replace('{max}', stats.maxAllowed.toString())
-            .replace('{percentage}', Math.round((stats.used / stats.maxAllowed) * 100).toString());
-
-        process.stdout.write(chalk.gray(statsMessage) + '\n');
-
-        if (stats.isNearLimit) {
-            process.stdout.write(chalk.yellow(historyMessages.main.messages.tokenUsage.nearLimit) + '\n');
-        }
-
-        process.stdout.write('\n');
-
-        messages.forEach((message, index) => {
-            const timeStr = message.timestamp.toLocaleTimeString(historyMessages.main.messages.format.timeLocale, {
-                hour: '2-digit',
-                minute: '2-digit',
-            });
-
-            if (message.type === 'user') {
-                const prefix = chalk.bgBlue.white.bold(` [${index + 1}] ${historyMessages.main.messages.userLabel} `) + chalk.blue(` ${timeStr} `);
-                process.stdout.write(prefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.displayContent || message.content) + '\n\n');
-            } else if (message.type === 'ai' || message.type === 'tool') {
-                const isTool = message.type === 'tool';
-                const label = isTool ? historyMessages.main.messages.toolLabel : historyMessages.main.messages.aiLabel;
-                const bgColor = isTool ? chalk.bgYellow.black : chalk.bgGreen.white;
-
-                const prefix = bgColor.bold(` [${index + 1}] ${label} `) + chalk.green(` ${timeStr} `);
-                process.stdout.write(prefix + '\n');
-
-                const streamRenderer = new StreamRenderer();
-                const contentToRender = message.displayContent || message.content;
-                const renderedOutput = streamRenderer.processChunk(contentToRender);
-                const finalOutput = streamRenderer.finalize();
-                process.stdout.write(renderedOutput + finalOutput + '\n\n');
-            }
-        });
-
-        const totalMsg = historyMessages.main.messages.totalMessages.replace('{count}', messages.length.toString());
-        process.stdout.write(chalk.gray(`\n${totalMsg}\n\n`));
-    }
-} 
+}

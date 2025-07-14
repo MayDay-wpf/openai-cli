@@ -14,6 +14,7 @@ export interface ChatMessage {
   content: ChatMessageContent;
   tool_calls?: any[];
   tool_call_id?: string;
+  name?: string; // For tool calls
 }
 
 export interface StreamOptions {
@@ -24,6 +25,7 @@ export interface StreamOptions {
   responseFormat?: 'text' | 'json_object';
   tools?: any[];
   onChunk?: (chunk: string) => void;
+  onReasoningChunk?: (chunk: string) => void;
   onToolChunk?: (toolCallChunk: any) => void;
   onAssistantMessage?: (message: { content: string, toolCalls: any[] }) => void;
   onToolCall?: (toolCall: any) => Promise<any>;
@@ -102,8 +104,9 @@ export class OpenAIService {
           type: msg.role === 'assistant' ? 'ai' : msg.role,
           content: content,
           // 保留工具调用信息
-          //tool_calls: msg.tool_calls,
+          tool_calls: msg.tool_calls,
           tool_call_id: msg.tool_call_id,
+          name: (msg as any).name,
           timestamp: new Date()
         };
       });
@@ -142,7 +145,8 @@ export class OpenAIService {
         // 恢复工具调用信息
         tool_calls: msg.tool_calls,
         tool_call_id: msg.tool_call_id,
-      });
+        name: (msg as any).name,
+      } as ChatMessage);
     });
     return resultMessages;
   }
@@ -160,6 +164,7 @@ export class OpenAIService {
       responseFormat = 'text',
       tools,
       onChunk,
+      onReasoningChunk,
       onAssistantMessage,
       onToolCall,
       onComplete,
@@ -196,7 +201,7 @@ export class OpenAIService {
 
         // 调试日志，打印每次请求的请求体
         // console.log('--- OpenAI Request Body [DEBUG] ---');
-        // console.log(JSON.stringify(requestBody, null, 2));
+        // console.log(JSON.stringify(requestBody.messages, null, 2));
         // console.log('------------------------------------');
 
         const completion = await client.chat.completions.create({
@@ -221,6 +226,12 @@ export class OpenAIService {
             onChunk?.(delta.content);
           }
 
+          // 处理模型的思考过程
+          const reasoning = (delta as any).reasoning_content || (delta as any).reasoning;
+          if (reasoning) {
+            onReasoningChunk?.(reasoning);
+          }
+
           // 处理工具调用
           if (delta.tool_calls) {
             hasToolCalls = true;
@@ -243,10 +254,14 @@ export class OpenAIService {
               }
 
               if (toolCallDelta.function) {
+                // If a new function name is provided, it's considered a new tool call for that index.
+                // This handles model behavior where an index might be reused.
                 if (toolCallDelta.function.name) {
-                  pendingToolCalls[index].function.name += toolCallDelta.function.name;
-                }
-                if (toolCallDelta.function.arguments) {
+                  pendingToolCalls[index].function.name = toolCallDelta.function.name;
+                  // Reset arguments and initialize with any arguments in the current delta.
+                  pendingToolCalls[index].function.arguments = toolCallDelta.function.arguments || '';
+                } else if (toolCallDelta.function.arguments) {
+                  // If no new name, just append the arguments.
                   pendingToolCalls[index].function.arguments += toolCallDelta.function.arguments;
                 }
               }
@@ -272,6 +287,8 @@ export class OpenAIService {
             toolCalls: pendingToolCalls
           });
 
+          fullResponse = '';
+
           // 执行每个工具调用
           for (const toolCall of pendingToolCalls) {
             if (toolCall.function && toolCall.function.name) {
@@ -282,6 +299,7 @@ export class OpenAIService {
                 currentMessages.push({
                   role: 'tool',
                   tool_call_id: toolCall.id,
+                  name: toolCall.function.name,
                   content: JSON.stringify(toolResult)
                 } as any);
 
@@ -292,6 +310,7 @@ export class OpenAIService {
                 currentMessages.push({
                   role: 'tool',
                   tool_call_id: toolCall.id,
+                  name: toolCall.function.name,
                   content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
                 } as any);
               }
@@ -304,13 +323,10 @@ export class OpenAIService {
           // 更新请求消息，继续对话
           requestBody.messages = currentMessages;
 
-          // 重置fullResponse，因为工具调用后会有新的回复
-          fullResponse = '';
-
           // 继续循环，让AI基于工具结果生成回复
           continue;
         }
-
+        
         // 没有工具调用，这是最终回复
         break;
       }

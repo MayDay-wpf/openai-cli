@@ -49,6 +49,7 @@
   "preferGlobal": true,
   "dependencies": {
     "@inquirer/prompts": "^7.6.0",
+    "@types/uuid": "^10.0.0",
     "boxen": "^8.0.1",
     "chalk": "^4.1.2",
     "cli-highlight": "^2.1.11",
@@ -58,9 +59,12 @@
     "marked": "^12.0.2",
     "mcp-client": "^1.13.0",
     "openai": "^4.62.1",
-    "tiktoken": "^1.0.21"
+    "tiktoken": "^1.0.21",
+    "uuid": "^11.1.0",
+    "diff": "^5.2.0"
   },
   "devDependencies": {
+    "@types/diff": "^5.2.0",
     "@types/figlet": "^1.5.8",
     "@types/inquirer": "^9.0.8",
     "@types/marked": "^5.0.2",

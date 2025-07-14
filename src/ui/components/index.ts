@@ -7,6 +7,7 @@ export * from './menu';
 export * from './message-handler';
 export * from './native-input';
 export * from './responses';
+export * from './stream-renderer';
 
 // 重新导出Message类型以保持兼容性
 export type { Message } from '../../utils/token-calculator';
