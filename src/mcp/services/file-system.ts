@@ -1,6 +1,9 @@
+import { highlight } from 'cli-highlight';
+import { createPatch } from 'diff';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createPatch } from 'diff';
+import { StorageService } from '../../services/storage';
+import { getLanguageForFile } from '../../utils/file-types';
 import { BaseMCPService } from '../base-service';
 import {
     CreateDirectoryParams,
@@ -352,8 +355,14 @@ export class FileSystemService extends BaseMCPService {
 
             const diff = createPatch(targetPath, '', content);
             const resultMessage = `✅ **File created successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Content:** ${content.length > 0 ? `${content.length} characters` : 'Empty file'}\n${parentCreated ? '**Parent directories:** Created automatically\n' : ''}\n*File is ready for use.*`;
-            
-            return this.createSuccessResponse(request.id, { message: resultMessage, diff });
+
+            // Note: 如果不是手动确认,则打印diff到控制台
+            const needsConfirmation = StorageService.isFunctionConfirmationRequired('file-system_create_file');
+            if (!needsConfirmation) {
+                console.log(highlight(diff, { language: 'diff', ignoreIllegals: true }));
+            }
+            const finalMessage = `${resultMessage}\n\n**Changes:**\n\`\`\`diff\n${diff}\n\`\`\``;
+            return this.createSuccessResponse(request.id, finalMessage);
         } catch (error) {
             return this.handleFileOperationError(request.id, 'create_file', params.path, error);
         }
@@ -517,14 +526,39 @@ export class FileSystemService extends BaseMCPService {
             // Write the edited content back to the file
             fs.writeFileSync(targetPath, editedContent, encoding as BufferEncoding);
 
+            const contextLines = 30;
+            const newContentLineCount = newContentLines.length;
+
+            // Calculate the display range
+            const displayStartLine = Math.max(1, params.startLine - contextLines);
+            const displayEndLine = Math.min(editedLines.length, params.startLine + newContentLineCount - 1 + contextLines);
+
+            // Extract the relevant code block with line numbers
+            const codeBlock = editedLines
+                .slice(displayStartLine - 1, displayEndLine)
+                .map((line, index) => `${(displayStartLine + index).toString().padStart(5, ' ')}: ${line}`)
+                .join('\n');
+
+            const language = getLanguageForFile(targetPath);
+            const resultMessage = `✅ **File Edited: \`${targetPath}\`**
+
+AI has modified the file. Below is the code block surrounding the edit (lines ${params.startLine}-${params.startLine + newContentLineCount - 1}).
+
+**CRITICAL ACTION: Review the code block below to ensure the edit is correct.**
+\`\`\`${language}
+${codeBlock}
+\`\`\`
+
+- If the edit is correct, reply: \`✔checked\`
+- If the edit is incorrect, use \`edit_file\` to fix it.`;
+
             const diff = createPatch(targetPath, originalContent, editedContent);
-
-            const linesChanged = params.endLine - params.startLine + 1;
-            const newTotalLines = editedLines.length;
-
-            const resultMessage = `✅ **File edited successfully**\n\n**File:** \`${targetPath}\`\n**Lines edited:** ${params.startLine}-${params.endLine} (${linesChanged} lines)\n**New content:** ${newContentLines.length} lines\n**Total lines:** ${totalLines} → ${newTotalLines}\n\n**CRITICAL ACTION: VERIFY THE EDIT.**\n1.  **Examine the diff below.**\n2.  **Confirm the change is 100% correct and as intended.**\n3.  **If correct, you MUST reply with the word "√checked".**\n4.  **If incorrect, you MUST call \`edit_file\` again to make corrections.**\n\n**DO NOT proceed with other tasks until you have verified this edit.**`;
-
-            return this.createSuccessResponse(request.id, { message: resultMessage, diff });
+            const needsConfirmation = StorageService.isFunctionConfirmationRequired('file-system_edit_file');
+            if (!needsConfirmation) {
+                console.log(highlight(diff, { language: 'diff', ignoreIllegals: true }));
+            }
+            const finalMessage = `${resultMessage}\n\n**Changes:**\n\`\`\`diff\n${diff}\n\`\`\``;
+            return this.createSuccessResponse(request.id, finalMessage);
 
         } catch (error) {
             return this.handleFileEditError(request.id, params.path, error);

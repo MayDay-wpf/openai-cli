@@ -1,9 +1,8 @@
 import chalk from 'chalk';
-import * as fs from 'fs';
-import { marked } from 'marked';
-import * as path from 'path';
 import { highlight } from 'cli-highlight';
 import { createPatch } from 'diff';
+import * as fs from 'fs';
+import * as path from 'path';
 import { TodosService } from '../../mcp/services';
 import { languageService } from '../../services/language';
 import { ChatMessage, openAIService } from '../../services/openai';
@@ -302,7 +301,7 @@ When you see such a message, you MUST:
                 onToolCall: async (toolCall: any) => {
                     // onAssistantMessage 已经停止了动画，这里执行工具调用
                     const result = await this.handleToolCall(toolCall);
-                    // 关键改动：在工具调用完成后，立即为下一轮AI响应重置状态
+                    // 在工具调用完成后，立即为下一轮AI响应重置状态
                     resetForNewResponse();
                     startLoading(); // 为下一轮AI思考重新启动加载动画
                     return result;
@@ -355,11 +354,8 @@ When you see such a message, you MUST:
                     }
 
                     // Check if we need to continue the task
-                    if (!TodosService.areAllTodosCompleted()) {
-                        setTimeout(() => this.processAIRequest(true), 100);
-                    } else {
-                        this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
-                    }
+                    // The AI's response turn is complete. Finalize the state.
+                    this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
                 },
                 onError: (error: Error) => {
                     stopLoading(); // 出错时停止动画
@@ -411,7 +407,7 @@ When you see such a message, you MUST:
             const functionName = toolCall.function.name;
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
-            console.log(chalk.cyan(messages.main.messages.toolCall.calling.replace('{name}', functionName)));
+            console.log(chalk.yellow.bold(` 🛠️ ${messages.main.messages.toolCall.calling.replace('{name}', functionName)}`));
 
             // 截断并打印参数，防止过长的参数刷屏
             // const paramsString = JSON.stringify(parameters, null, 2);
@@ -540,7 +536,7 @@ When you see such a message, you MUST:
         console.log(chalk.yellow(messages.main.messages.toolCall.handle));
         console.log(chalk.white(`Tool: ${chalk.bold(functionName)}`));
         console.log(chalk.white(`Parameters: ${chalk.gray(JSON.stringify(parameters, null, 2))}`));
-        
+
         if (diff) {
             console.log(chalk.yellow.bold('--- Proposed Changes ---'));
             console.log(highlight(diff, { language: 'diff' }));
@@ -677,8 +673,8 @@ When you see such a message, you MUST:
                 .map((filePath: string) => {
                     try {
                         const absolutePath = path.resolve(process.cwd(), filePath);
-                        const content = fs.readFileSync(absolutePath, 'utf-8');
-                        return `--- ${filePath} ---\n${content}`;
+                        //const content = fs.readFileSync(absolutePath, 'utf-8');
+                        return `--- ${filePath} ---`;
                     } catch (error) {
                         this.displayMessage({
                             type: 'system',

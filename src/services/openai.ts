@@ -326,7 +326,7 @@ export class OpenAIService {
           // 继续循环，让AI基于工具结果生成回复
           continue;
         }
-        
+
         // 没有工具调用，这是最终回复
         break;
       }
