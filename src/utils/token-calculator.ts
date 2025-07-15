@@ -1,5 +1,5 @@
 import { get_encoding } from 'tiktoken';
-import { ChatMessage } from '../services/openai';
+import { ChatMessage, openAIService } from '../services/openai';
 import { StorageService } from '../services/storage';
 
 export interface Message {
@@ -17,6 +17,7 @@ export interface TokenCalculationResult {
     maxAllowedTokens: number;
     allowedMessages: Message[];
     droppedCount: number;
+    summary?: string; // 新增字段，用于存放压缩摘要
 }
 
 export class TokenCalculator {
@@ -86,93 +87,129 @@ export class TokenCalculator {
 
     /**
      * 智能选择历史记录，确保不超过上下文Token限制
+     * 现在是一个异步函数，以支持智能压缩
      */
-    static selectHistoryMessages(
+    static async selectHistoryMessages(
         messages: Message[],
         systemMessage: string,
         targetUsageRatio: number = 0.8
-    ): TokenCalculationResult {
+    ): Promise<TokenCalculationResult> {
         const apiConfig = StorageService.getApiConfig();
         const maxContextTokens = apiConfig.contextTokens || 128000;
         const maxAllowedTokens = Math.floor(maxContextTokens * targetUsageRatio);
 
-        // 计算系统消息的tokens
-        const systemTokens = this.calculateTokens(systemMessage) + 4; // 加上角色开销
+        const systemTokens = this.calculateTokens(systemMessage) + 4;
 
-        // 首先计算所有消息的总token
         let totalOriginalTokens = systemTokens;
         messages.forEach(msg => {
-            totalOriginalTokens += this.calculateTokens(msg.content) + 4; // 加上角色开销
+            const contentString = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? null);
+            totalOriginalTokens += this.calculateTokens(contentString) + 4;
         });
 
-        // 如果总token未超过限制，则返回所有消息，不进行压缩
         if (totalOriginalTokens <= maxAllowedTokens) {
             return {
                 totalTokens: totalOriginalTokens,
                 maxAllowedTokens,
                 allowedMessages: messages,
-                droppedCount: 0
+                droppedCount: 0,
             };
         }
 
         console.log(`--- History token limit exceeded (${totalOriginalTokens} > ${maxAllowedTokens}), compressing... ---`);
+        
+        // --- 智能压缩逻辑 ---
+        const tokensToCut = totalOriginalTokens - maxAllowedTokens;
+        let tokensCounted = 0;
+        let cutIndex = -1;
 
-
-        // 如果系统消息就超过限制，返回空结果
-        if (systemTokens >= maxAllowedTokens) {
-            return {
-                totalTokens: systemTokens,
-                maxAllowedTokens,
-                allowedMessages: [],
-                droppedCount: messages.length
-            };
-        }
-
-        // 可用于历史记录的token数量
-        const availableTokens = maxAllowedTokens - systemTokens;
-        const allowedMessages: Message[] = [];
-        let currentTokens = 0;
-        let droppedCount = 0;
-
-        // 从最新的消息开始向前选择
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const message = messages[i];
-            const messageTokens = this.calculateTokens(message.content) + 4; // 加上角色开销
-
-            // 检查添加这条消息是否会超过限制
-            if (currentTokens + messageTokens <= availableTokens) {
-                allowedMessages.unshift(message); // 添加到开头以保持时间顺序
-                currentTokens += messageTokens;
-            } else {
-                droppedCount = i + 1; // 丢弃的消息数量
+        // 1. 找到需要压缩的消息的切分点
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            const contentString = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? null);
+            tokensCounted += this.calculateTokens(contentString) + 4;
+            if (tokensCounted >= tokensToCut) {
+                cutIndex = i;
                 break;
             }
         }
+        
+        // 2. 为了保证上下文的完整性，我们找到下一个'user'消息作为最终的切分点
+        let finalCutIndex = -1;
+        if (cutIndex !== -1) {
+            for (let i = cutIndex; i < messages.length; i++) {
+                if (messages[i].type === 'user') {
+                    finalCutIndex = i;
+                    break;
+                }
+            }
+        }
+
+        // 如果找不到安全的切分点，或者切分后没剩下任何消息，则放弃压缩并返回空
+        if (finalCutIndex === -1 || finalCutIndex === messages.length -1) {
+             return { totalTokens: systemTokens, maxAllowedTokens, allowedMessages: [], droppedCount: messages.length };
+        }
+
+        const messagesToCompress = messages.slice(0, finalCutIndex);
+        const allowedMessages = messages.slice(finalCutIndex);
+
+        // 3. 将待压缩消息转换为API格式
+        const compressionChatMessages: ChatMessage[] = messagesToCompress.map(msg => ({
+            role: msg.type === 'ai' ? 'assistant' : msg.type,
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? null)
+        } as ChatMessage));
+        
+        // 4. 调用API进行压缩
+        let summary = '';
+        try {
+            const summaryPrompt: ChatMessage = {
+                role: 'user',
+                content: 'Please summarize the preceding conversation into a concise paragraph. Keep all key facts, decisions, and code snippets mentioned. The summary will be used as context for a following conversation.'
+            };
+            
+            const summaryResponse = await openAIService.chat({
+                messages: [...compressionChatMessages, summaryPrompt],
+                temperature: 0.2,
+                maxTokens: 1000,
+            });
+            summary = summaryResponse;
+        } catch (error) {
+            console.warn('Failed to compress conversation history:', error);
+            // 压缩失败，回退到丢弃策略
+            return { totalTokens: systemTokens, maxAllowedTokens, allowedMessages: [], droppedCount: messages.length, summary: '[Conversation history was too long and compression failed.]' };
+        }
+        
+        // 5. 重新计算最终的token
+        let finalTokens = systemTokens + this.calculateTokens(summary) + 4;
+        allowedMessages.forEach(msg => {
+            const contentString = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? null);
+            finalTokens += this.calculateTokens(contentString) + 4;
+        });
 
         return {
-            totalTokens: systemTokens + currentTokens,
+            totalTokens: finalTokens,
             maxAllowedTokens,
-            allowedMessages,
-            droppedCount
+            allowedMessages: allowedMessages,
+            droppedCount: messagesToCompress.length,
+            summary: summary
         };
     }
 
     /**
      * 获取当前配置的上下文使用统计信息
      */
-    static getContextUsageStats(
+    static async getContextUsageStats(
         messages: Message[],
         systemMessage: string,
         targetUsageRatio: number = 0.8
-    ): {
+    ): Promise<{
         maxContext: number;
         maxAllowed: number;
         used: number;
         percentage: number;
         remaining: number;
         isNearLimit: boolean;
-    } {
-        const result = this.selectHistoryMessages(messages, systemMessage, targetUsageRatio);
+    }> {
+        const result = await this.selectHistoryMessages(messages, systemMessage, targetUsageRatio);
         const apiConfig = StorageService.getApiConfig();
         const maxContext = apiConfig.contextTokens || 128000;
 

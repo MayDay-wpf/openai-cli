@@ -64,8 +64,8 @@ export class MainPage {
       addMessage: (message: Message) => {
         this.messages.push(message);
       },
-      getRecentMessages: (count: number = 20) => {
-        return this.messages.slice(-count);
+      getRecentMessages: () => {
+        return this.messages;
       },
       getSystemDetector: () => {
         return this.systemDetector;
@@ -173,6 +173,12 @@ export class MainPage {
   // 公开API：清除选中文件列表
   clearSelectedFiles(): void {
     this.inputHandler.clearSelectedFiles();
+  }
+
+  // 重新加载页面
+  async reload(): Promise<void> {
+    this.destroy();
+    await this.show();
   }
 
   async show(): Promise<void> {
@@ -288,22 +294,16 @@ export class MainPage {
           }
         }
 
-        if (userInput === '/clear') {
-          this.messages = [];
-          this.commandManager.setHasExportedHistory(false);
-          // 清除选中文件列表
-          this.clearSelectedFiles();
-          // 强制清屏
-          process.stdout.write('\x1B[2J\x1B[3J\x1B[H');
-          process.stdout.write('\x1Bc');
-          continue;
-        }
 
         // 使用 CommandManager 处理用户输入
         const commandResult = await this.commandManager.handleInput(userInput, this.messages);
 
         if (commandResult.handled) {
           // 命令已被处理
+          if (commandResult.shouldReload) {
+            await this.reload();
+            continue; // 重新加载后继续循环
+          }
           if (commandResult.newMessages) {
             this.messages = commandResult.newMessages;
           }
@@ -365,11 +365,27 @@ export class MainPage {
 
     return new Promise(async (resolve, reject) => {
       let currentInput = '';
+      let cursorPosition = 0;
       let currentState: InputState | null = null;
       let isDestroyed = false;
 
       // 显示初始提示符
       process.stdout.write(chalk.cyan(this.currentMessages.main.prompt));
+
+      // 绘制带光标的输入行
+      const redrawInputLine = () => {
+        if (isDestroyed) return;
+
+        // 清除当前行并重新显示
+        const prompt = chalk.cyan(this.currentMessages.main.prompt);
+        process.stdout.write('\x1B[2K\x1B[0G');
+        process.stdout.write(prompt + currentInput);
+
+        // 重新定位光标
+        const promptWidth = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
+        const cursorOffset = StringUtils.getDisplayWidth(currentInput.slice(0, cursorPosition));
+        process.stdout.write(`\x1B[${promptWidth + cursorOffset + 1}G`);
+      };
 
       // 显示建议列表
       const showSuggestions = (state: InputState) => {
@@ -454,16 +470,16 @@ export class MainPage {
         // 显示新建议
         if (newState.showingSuggestions) {
           showSuggestions(newState);
+        } else {
+          // 如果没有建议，也要确保光标位置正确
+          redrawInputLine();
         }
       };
 
       // 强制刷新输入行显示
       const refreshInputLine = () => {
         if (isDestroyed) return;
-
-        // 清除当前行并重新显示
-        process.stdout.write('\x1B[2K\x1B[0G');
-        process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + currentInput);
+        redrawInputLine();
       };
 
       // 清理函数
@@ -551,9 +567,10 @@ export class MainPage {
 
                 // 更新输入内容
                 currentInput = newInput;
+                cursorPosition = currentInput.length;
 
                 // 刷新输入行显示
-                refreshInputLine();
+                redrawInputLine();
 
                 // 更新显示
                 await updateDisplay();
@@ -573,25 +590,18 @@ export class MainPage {
 
           // Backspace 键
           if (keyCode === 127 || keyCode === 8) {
-            if (currentInput.length > 0) {
+            if (cursorPosition > 0) {
               // 先隐藏建议列表（如果有的话）
               if (currentState?.showingSuggestions) {
                 hideSuggestions();
               }
 
-              // 获取最后一个字符及其显示宽度
-              const lastChar = currentInput.slice(-1);
-              const lastCharWidth = StringUtils.getDisplayWidth(lastChar);
-              currentInput = currentInput.slice(0, -1);
+              // 从光标前删除一个字符
+              currentInput = currentInput.slice(0, cursorPosition - 1) + currentInput.slice(cursorPosition);
+              cursorPosition--;
 
-              // 根据字符的实际显示宽度回退光标
-              if (lastCharWidth === 2) {
-                // 宽字符（如中文），占用2个字符宽度
-                process.stdout.write('\b\b  \b\b');
-              } else {
-                // 窄字符（如ASCII），占用1个字符宽度
-                process.stdout.write('\b \b');
-              }
+              // 重新绘制输入行和光标
+              redrawInputLine();
 
               // 重新更新显示
               await updateDisplay();
@@ -599,7 +609,7 @@ export class MainPage {
             return;
           }
 
-          // 上下箭头键处理
+          // 上下左右箭头键处理
           if (key.length >= 3 && key.startsWith('\x1B[')) {
             if (key === '\x1B[A') { // 上箭头
               if (currentState?.showingSuggestions && currentState.suggestions.length > 0) {
@@ -621,6 +631,26 @@ export class MainPage {
                 showSuggestions(currentState);
               }
               return;
+            } else if (key === '\x1B[D') { // 左箭头
+              if (cursorPosition > 0) {
+                if (currentState?.showingSuggestions) {
+                  hideSuggestions();
+                  currentState.showingSuggestions = false;
+                }
+                cursorPosition--;
+                redrawInputLine();
+              }
+              return;
+            } else if (key === '\x1B[C') { // 右箭头
+              if (cursorPosition < currentInput.length) {
+                if (currentState?.showingSuggestions) {
+                  hideSuggestions();
+                  currentState.showingSuggestions = false;
+                }
+                cursorPosition++;
+                redrawInputLine();
+              }
+              return;
             }
           }
 
@@ -635,40 +665,31 @@ export class MainPage {
           }
 
           // 普通字符（支持中文等多字节字符）
-          if (key.length === 1 && keyCode >= 32) {
-            // 支持所有可打印字符，包括中文
-            currentInput += key;
-            process.stdout.write(key);
-            await updateDisplay();
-          } else if (key.length > 1) {
-            // 处理多字节字符或粘贴内容
-            // 过滤掉控制序列（以\x1B开头的）
-            if (!key.startsWith('\x1B')) {
-              // 检查是否为粘贴的长文本（包含换行符或长度较大）
-              if (key.includes('\n') || key.includes('\r') || key.length > 10) {
-                // 处理粘贴内容
-                const processedText = StringUtils.processPastedText(key);
-                if (processedText) {
-                  // 先隐藏建议列表（如果有的话）
-                  if (currentState?.showingSuggestions) {
-                    hideSuggestions();
-                  }
+          const isPrintable = (key.length === 1 && keyCode >= 32) || (key.length > 1 && !key.startsWith('\x1B'));
 
-                  // 添加处理后的文本到输入
-                  currentInput += processedText;
+          if (isPrintable) {
+            let textToInsert = key;
 
-                  // 刷新输入行显示
-                  refreshInputLine();
+            // 处理粘贴内容
+            if (key.includes('\n') || key.includes('\r') || key.length > 10) {
+              textToInsert = StringUtils.processPastedText(key);
+            }
 
-                  // 更新显示
-                  await updateDisplay();
-                }
-              } else {
-                // 正常的多字节字符（如中文字符）
-                currentInput += key;
-                process.stdout.write(key);
-                await updateDisplay();
+            if (textToInsert) {
+              // 先隐藏建议列表（如果有的话）
+              if (currentState?.showingSuggestions) {
+                hideSuggestions();
               }
+
+              // 在光标位置插入文本
+              currentInput = currentInput.slice(0, cursorPosition) + textToInsert + currentInput.slice(cursorPosition);
+              cursorPosition += textToInsert.length;
+
+              // 重新绘制输入行和光标
+              redrawInputLine();
+
+              // 更新显示
+              await updateDisplay();
             }
           }
         } catch (error) {

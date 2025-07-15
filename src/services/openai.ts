@@ -1,409 +1,166 @@
 import OpenAI from 'openai';
-import { TokenCalculator } from '../utils/token-calculator';
+import { ChatCompletionMessageParam } from 'openai/resources';
 import { StorageService } from './storage';
 
-export type ChatMessageContent =
-  | string
-  | (
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
-  )[];
+export type ChatMessage = ChatCompletionMessageParam;
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: ChatMessageContent;
-  tool_calls?: any[];
-  tool_call_id?: string;
-  name?: string; // For tool calls
-}
-
-export interface StreamOptions {
+export interface StreamChatOptions {
   messages: ChatMessage[];
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  responseFormat?: 'text' | 'json_object';
   tools?: any[];
-  onChunk?: (chunk: string) => void;
-  onReasoningChunk?: (chunk: string) => void;
-  onToolChunk?: (toolCallChunk: any) => void;
-  onAssistantMessage?: (message: { content: string, toolCalls: any[] }) => void;
-  onToolCall?: (toolCall: any) => Promise<any>;
-  onComplete?: (fullResponse: string) => void;
-  onError?: (error: Error) => void;
+  onChunk: (chunk: string) => void;
+  onComplete: (fullResponse: string) => void;
+  onReasoningChunk: (chunk: string) => void;
+  onToolChunk: (toolChunk: any) => void;
+  onAssistantMessage: (message: { content: string; toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] }) => void;
+  onError: (error: Error) => void;
 }
 
-/**
- * OpenAI服务
- * 处理与OpenAI API的交互，支持流式输出
- */
-export class OpenAIService {
-  private client: OpenAI | null = null;
+export interface StreamChatResult {
+  status: 'done' | 'tool_calls';
+  assistantResponse: {
+    content: string | null;
+    tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+  }
+}
 
-  /**
-   * 初始化OpenAI客户端
-   */
-  private initializeClient(): OpenAI {
+class OpenAIService {
+  private openai: OpenAI;
+
+  constructor() {
+    const apiConfig = StorageService.getApiConfig();
+    this.openai = new OpenAI({
+      apiKey: apiConfig.apiKey,
+      baseURL: apiConfig.baseUrl
+    });
+  }
+
+  public updateConfig() {
+    const apiConfig = StorageService.getApiConfig();
+    this.openai = new OpenAI({
+      apiKey: apiConfig.apiKey,
+      baseURL: apiConfig.baseUrl
+    });
+  }
+
+  public async streamChat(options: StreamChatOptions): Promise<StreamChatResult> {
     const apiConfig = StorageService.getApiConfig();
 
-    if (!apiConfig.apiKey || !apiConfig.baseUrl) {
-      throw new Error('API configuration is incomplete. Please set the API key and base URL first.');
-    }
-
-    if (!this.client) {
-      this.client = new OpenAI({
-        apiKey: apiConfig.apiKey,
-        baseURL: apiConfig.baseUrl,
+    // 打印请消息
+    // console.log('--- OpenAI Request Body [DEBUG] ---');
+    // console.log(JSON.stringify(options.messages, null, 2));
+    // console.log('------------------------------------');
+    // 打印系统提示词
+    // console.log('--- System Prompt [DEBUG] ---');
+    // console.log(options.messages[0].content);
+    // console.log('------------------------------------');
+    try {
+      const stream = await this.openai.chat.completions.create({
+        model: apiConfig.model || 'gpt-4.1',
+        messages: options.messages as any,
+        stream: true,
+        tools: options.tools,
+        tool_choice: options.tools ? 'auto' : undefined,
       });
-    }
 
-    return this.client;
-  }
+      let accumulatedContent = '';
+      let toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+      let currentToolCallId: string | null = null;
+      let currentToolCallFunction: { name: string; arguments: string } = { name: '', arguments: '' };
+      let reasoningContent = '';
 
-  /**
-   * 获取客户端（如果配置有变化则重新创建）
-   */
-  private getClient(): OpenAI {
-    const apiConfig = StorageService.getApiConfig();
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
 
-    // 如果配置发生变化，重新创建客户端
-    if (this.client) {
-      const currentConfig = {
-        apiKey: this.client.apiKey,
-        baseURL: this.client.baseURL,
-      };
-
-      if (currentConfig.apiKey !== apiConfig.apiKey ||
-        currentConfig.baseURL !== apiConfig.baseUrl) {
-        this.client = null;
-      }
-    }
-
-    return this.initializeClient();
-  }
-
-  /**
-   * 将ChatMessage转换为Message格式（用于TokenCalculator）
-   */
-  private convertChatMessagesToMessages(chatMessages: ChatMessage[]): any[] {
-    return chatMessages
-      .filter(msg => msg.role !== 'system') // 排除系统消息
-      .map(msg => {
-        let content = '';
-        if (typeof msg.content === 'string') {
-          content = msg.content;
-        } else if (Array.isArray(msg.content)) {
-          // 对于Vision请求，只提取文本部分进行token计算
-          content = msg.content
-            .filter((item): item is { type: 'text'; text: string } => item.type === 'text')
-            .map(item => item.text)
-            .join(' ');
+        if (delta?.content) {
+          accumulatedContent += delta.content;
+          options.onChunk(delta.content);
         }
 
-        return {
-          type: msg.role === 'assistant' ? 'ai' : msg.role,
-          content: content,
-          // 保留工具调用信息
-          tool_calls: msg.tool_calls,
-          tool_call_id: msg.tool_call_id,
-          name: (msg as any).name,
-          timestamp: new Date()
-        };
-      });
-  }
-
-  /**
-   * 使用TokenCalculator压缩消息历史
-   */
-  private compressMessagesWithTokenCalculator(messages: ChatMessage[]): ChatMessage[] {
-    // 提取系统消息
-    const systemMessages = messages.filter(msg => msg.role === 'system');
-    const systemMessageContent = systemMessages.length > 0 ? systemMessages[0].content : '';
-    const systemMessage = typeof systemMessageContent === 'string' ? systemMessageContent : '';
-
-    // 转换为Message格式
-    const historyMessages = this.convertChatMessagesToMessages(messages);
-
-    // 使用TokenCalculator进行智能选择，使用70%的上下文限制为工具调用留出空间
-    const tokenResult = TokenCalculator.selectHistoryMessages(
-      historyMessages,
-      systemMessage,
-      0.7
-    );
-
-    // 构建结果消息数组
-    const resultMessages: ChatMessage[] = [];
-
-    // 添加系统消息
-    systemMessages.forEach(msg => resultMessages.push(msg));
-
-    // 添加选中的历史消息，转换回ChatMessage格式
-    tokenResult.allowedMessages.forEach(msg => {
-      resultMessages.push({
-        role: msg.type === 'ai' ? 'assistant' : msg.type as 'user' | 'tool',
-        content: msg.content,
-        // 恢复工具调用信息
-        tool_calls: msg.tool_calls,
-        tool_call_id: msg.tool_call_id,
-        name: (msg as any).name,
-      } as ChatMessage);
-    });
-    return resultMessages;
-  }
-
-  /**
-   * 发送聊天消息（流式输出）
-   */
-  async streamChat(options: StreamOptions): Promise<string> {
-    const client = this.getClient();
-    const apiConfig = StorageService.getApiConfig();
-
-    const {
-      messages,
-      model = apiConfig.model || 'gpt-4.1',
-      responseFormat = 'text',
-      tools,
-      onChunk,
-      onReasoningChunk,
-      onAssistantMessage,
-      onToolCall,
-      onComplete,
-      onError,
-      onToolChunk
-    } = options;
-
-    let fullResponse = '';
-    let currentMessages = [...messages]; // 复制消息数组，用于工具调用循环
-
-    try {
-      const requestBody: any = {
-        model,
-        messages: currentMessages,
-        stream: true, // 使用真正的流式输出
-      };
-
-      if (responseFormat === 'json_object') {
-        requestBody.response_format = { type: 'json_object' };
-      }
-
-      if (tools && tools.length > 0) {
-        requestBody.tools = tools;
-        requestBody.tool_choice = 'auto';
-      }
-
-      let maxToolCalls = apiConfig.maxToolCalls || 25; // 最大工具调用次数，防止无限循环
-      let toolCallCount = 0;
-      let hasToolCalls = false;
-      let pendingToolCalls: any[] = [];
-      let assistantMessage = '';
-
-      while (toolCallCount < maxToolCalls) {
-
-        // 调试日志，打印每次请求的请求体
-        // console.log('--- OpenAI Request Body [DEBUG] ---');
-        // console.log(JSON.stringify(requestBody.messages, null, 2));
-        // console.log('------------------------------------');
-
-        const completion = await client.chat.completions.create({
-          ...requestBody,
-          stream: true
-        }) as any;
-
-        hasToolCalls = false;
-        pendingToolCalls = [];
-        assistantMessage = '';
-
-        // 处理流式响应
-        for await (const chunk of completion) {
-          const delta = chunk.choices[0]?.delta;
-
-          if (!delta) continue;
-
-          // 处理普通内容
-          if (delta.content) {
-            assistantMessage += delta.content;
-            fullResponse += delta.content;
-            onChunk?.(delta.content);
-          }
-
-          // 处理模型的思考过程
-          const reasoning = (delta as any).reasoning_content || (delta as any).reasoning;
-          if (reasoning) {
-            onReasoningChunk?.(reasoning);
-          }
-
-          // 处理工具调用
-          if (delta.tool_calls) {
-            hasToolCalls = true;
-            onToolChunk?.(delta.tool_calls);
-
-            for (const toolCallDelta of delta.tool_calls) {
-              const index = toolCallDelta.index || 0;
-
-              // 确保工具调用数组有足够的元素
-              while (pendingToolCalls.length <= index) {
-                pendingToolCalls.push({
-                  id: '',
+        if (delta?.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            if (toolCall.id) {
+              if (currentToolCallId) {
+                // A new tool call has started, so we finalize the previous one
+                toolCalls.push({
+                  id: currentToolCallId,
                   type: 'function',
-                  function: { name: '', arguments: '' }
+                  function: {
+                    name: currentToolCallFunction.name,
+                    arguments: currentToolCallFunction.arguments,
+                  },
                 });
               }
-
-              if (toolCallDelta.id) {
-                pendingToolCalls[index].id = toolCallDelta.id;
-              }
-
-              if (toolCallDelta.function) {
-                // If a new function name is provided, it's considered a new tool call for that index.
-                // This handles model behavior where an index might be reused.
-                if (toolCallDelta.function.name) {
-                  pendingToolCalls[index].function.name = toolCallDelta.function.name;
-                  // Reset arguments and initialize with any arguments in the current delta.
-                  pendingToolCalls[index].function.arguments = toolCallDelta.function.arguments || '';
-                } else if (toolCallDelta.function.arguments) {
-                  // If no new name, just append the arguments.
-                  pendingToolCalls[index].function.arguments += toolCallDelta.function.arguments;
-                }
-              }
+              currentToolCallId = toolCall.id;
+              currentToolCallFunction = { name: '', arguments: '' };
+            }
+            if (toolCall.function?.name) {
+              currentToolCallFunction.name += toolCall.function.name;
+            }
+            if (toolCall.function?.arguments) {
+              currentToolCallFunction.arguments += toolCall.function.arguments;
             }
           }
         }
 
-        // 如果有工具调用，处理它们
-        if (hasToolCalls && pendingToolCalls.length > 0 && onToolCall) {
-          toolCallCount++;
+        const finishReason = chunk.choices[0]?.finish_reason;
 
-          // 添加助手消息到对话历史
-          const assistantResponseMessage = {
-            role: 'assistant',
-            content: assistantMessage,
-            tool_calls: pendingToolCalls
+        if (finishReason === 'tool_calls' || (finishReason === 'stop' && currentToolCallId)) {
+          if (currentToolCallId) {
+            toolCalls.push({
+              id: currentToolCallId,
+              type: 'function',
+              function: {
+                name: currentToolCallFunction.name,
+                arguments: currentToolCallFunction.arguments,
+              },
+            });
+          }
+
+          if (options.onAssistantMessage) {
+            options.onAssistantMessage({ content: accumulatedContent, toolCalls });
+          }
+
+          return {
+            status: 'tool_calls',
+            assistantResponse: { content: accumulatedContent || null, tool_calls: toolCalls }
           };
-          currentMessages.push(assistantResponseMessage as any);
-
-          // 触发新的回调，通知UI层完整的助手消息
-          onAssistantMessage?.({
-            content: assistantMessage,
-            toolCalls: pendingToolCalls
-          });
-
-          fullResponse = '';
-
-          // 执行每个工具调用
-          for (const toolCall of pendingToolCalls) {
-            if (toolCall.function && toolCall.function.name) {
-              try {
-                const toolResult = await onToolCall(toolCall);
-
-                // 添加工具调用结果到对话历史
-                currentMessages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  name: toolCall.function.name,
-                  content: JSON.stringify(toolResult)
-                } as any);
-
-              } catch (error) {
-                console.warn('Tool call failed:', error);
-
-                // 添加工具调用错误到对话历史
-                currentMessages.push({
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  name: toolCall.function.name,
-                  content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-                } as any);
-              }
-            }
-          }
-
-          // 使用TokenCalculator检查并压缩消息历史，防止token溢出
-          currentMessages = this.compressMessagesWithTokenCalculator(currentMessages);
-
-          // 更新请求消息，继续对话
-          requestBody.messages = currentMessages;
-
-          // 继续循环，让AI基于工具结果生成回复
-          continue;
         }
-
-        // 没有工具调用，这是最终回复
-        break;
       }
 
-      if (toolCallCount >= maxToolCalls) {
-        console.warn('Max tool call limit reached');
+      if (options.onComplete) {
+        options.onComplete(accumulatedContent);
       }
 
-      onComplete?.(fullResponse);
-      return fullResponse;
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error : new Error('Unknown error');
-      onError?.(errorMessage);
-      throw errorMessage;
-    }
-  }
-
-  /**
-   * 发送单次聊天消息（非流式）
-   */
-  async chat(options: Omit<StreamOptions, 'onChunk' | 'onComplete' | 'onError'>): Promise<string> {
-    const client = this.getClient();
-    const apiConfig = StorageService.getApiConfig();
-
-    const {
-      messages,
-      model = apiConfig.model || 'gpt-4.1',
-      responseFormat = 'text'
-    } = options;
-
-    try {
-      const requestBody: any = {
-        model,
-        messages,
-        stream: false,
+      return {
+        status: 'done',
+        assistantResponse: { content: accumulatedContent }
       };
 
-      if (responseFormat === 'json_object') {
-        requestBody.response_format = { type: 'json_object' };
-      }
-
-      const response = await client.chat.completions.create(requestBody);
-
-      return response.choices[0]?.message?.content || '';
-
     } catch (error) {
-      throw error instanceof Error ? error : new Error('Unknown error');
+      options.onError(error as Error);
+      // In case of error, we consider it "done" to stop the loop.
+      return {
+        status: 'done',
+        assistantResponse: { content: null }
+      };
     }
   }
 
-  /**
-   * 获取可用的模型列表
-   */
-  async getModels(): Promise<string[]> {
+  public async chat(options: { messages: ChatMessage[], responseFormat?: 'text' | 'json_object', temperature?: number, maxTokens?: number }): Promise<string> {
+    const apiConfig = StorageService.getApiConfig();
     try {
-      const client = this.getClient();
-      const response = await client.models.list();
-
-      return response.data
-        .filter((model: any) => model.id.includes('gpt'))
-        .map((model: any) => model.id)
-        .sort();
-
+      const response = await this.openai.chat.completions.create({
+        model: apiConfig.model || 'gpt-4-turbo-preview',
+        messages: options.messages as any,
+        response_format: options.responseFormat ? { type: options.responseFormat } : undefined,
+        temperature: options.temperature,
+        max_tokens: options.maxTokens,
+      });
+      return response.choices[0]?.message?.content || '';
     } catch (error) {
-      console.warn('Failed to get model list:', error);
-      return ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o4-mini', 'o3-mini'];
+      throw error instanceof Error ? error : new Error('Unknown error in chat');
     }
-  }
-
-  /**
-   * 重置客户端（强制重新初始化）
-   */
-  resetClient(): void {
-    this.client = null;
   }
 }
 
-// 导出单例实例
 export const openAIService = new OpenAIService(); 

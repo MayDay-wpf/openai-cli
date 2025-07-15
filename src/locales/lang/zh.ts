@@ -3,7 +3,7 @@ import { Messages } from '../../types/language';
 export const zh: Messages = {
   welcome: {
     starting: '正在初始化...',
-    tagline: 'Powered by AIBotPRO https://aibotpro.cn',
+    tagline: 'Powered by AIBotPRO',
     menuPrompt: '请选择操作',
     menuOptions: {
       start: '开始使用',
@@ -153,6 +153,11 @@ export const zh: Messages = {
           '- **自我纠正**: 如果你发现自己或系统产生了类似上述错误示例的输出，你必须立即停止并纠正你的行为，严格遵循“一步一工具”和“独立JSON参数”的规则。\n\n' +
           '# 原始工具使用说明:\n' +
           '## 文件系统类：\n' +
+          '- **文件编辑最佳实践 (必须遵循)**:\\n' +
+          '  - **先读后写**: 编辑前，务必使用 `read_file` 获取最新的行号和内容。\\n' +
+          '  - **语法检查**: 每次编辑后，仔细检查代码是否存在语法错误，如括号未闭合等。\\n' +
+          '  - **核实变更**: 编辑完成后，再次读取文件，确认修改是否正确应用。\\n' +
+          '  - **善用终端**: 对于复杂的修改，利用终端工具（`execute_command`）运行测试或代码检查工具，以捕捉原子化编辑可能引入的错误。\\n\\n' +
           '- 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作。\n' +
           '- 你可以多次使用工具，且无任何限制。\n' +
           '- 使用任何工具不需要用户同意，你可以直接使用。\n' +

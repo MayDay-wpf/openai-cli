@@ -17,6 +17,7 @@ export interface CommandExecutionResult {
     shouldExit?: boolean;
     shouldContinue?: boolean;
     newMessages?: Message[];
+    shouldReload?: boolean;
 }
 
 export class CommandManager {
@@ -216,11 +217,12 @@ export class CommandManager {
 
             case '/clear':
                 this.hasExportedHistory = false; // 清空历史时重置导出状态
-                return { handled: true, shouldContinue: true, newMessages: [] };
+                return { handled: true, shouldReload: true };
 
-            case '/history':
-                this.showHistory(currentMessages);
+            case '/history': {
+                await this.showHistory(currentMessages);
                 return { handled: true, shouldContinue: true };
+            }
 
             default:
                 return { handled: false };
@@ -414,59 +416,43 @@ export class CommandManager {
     /**
      * 显示历史记录
      */
-    showHistory(messages: Message[]): void {
+    async showHistory(messages: Message[]): Promise<void> {
         const historyMessages = languageService.getMessages();
 
+        console.log(chalk.bold.yellow(`\n--- ${historyMessages.main.messages.historyTitle} ---`));
         if (messages.length === 0) {
-            process.stdout.write(chalk.yellow(historyMessages.main.messages.noHistory + '\n'));
-            return;
-        }
-
-        process.stdout.write(chalk.bold('\n=== ' + historyMessages.main.messages.historyTitle + ' ===\n\n'));
-
-        // 显示Token使用统计
-        const stats = TokenCalculator.getContextUsageStats(messages, '', 0.8);
-        const statsMessage = historyMessages.main.messages.tokenUsage.tokenStats
-            .replace('{used}', stats.used.toString())
-            .replace('{max}', stats.maxAllowed.toString())
-            .replace('{percentage}', Math.round((stats.used / stats.maxAllowed) * 100).toString());
-
-        process.stdout.write(chalk.gray(statsMessage) + '\n');
-
-        if (stats.isNearLimit) {
-            process.stdout.write(chalk.yellow(historyMessages.main.messages.tokenUsage.nearLimit) + '\n');
-        }
-
-        process.stdout.write('\n');
-
-        messages.forEach((message, index) => {
-            const timeStr = message.timestamp.toLocaleTimeString(historyMessages.main.messages.format.timeLocale, {
-                hour: '2-digit',
-                minute: '2-digit',
+            console.log(chalk.gray(historyMessages.main.messages.noHistory));
+        } else {
+            messages.forEach((msg) => {
+                const time = msg.timestamp.toLocaleTimeString(historyMessages.main.messages.format.timeLocale, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                });
+                const role = chalk.bold(msg.type.toUpperCase());
+                let content = '';
+                if (typeof msg.content === 'string') {
+                    content = msg.content.length > 100 ? msg.content.substring(0, 97) + '...' : msg.content;
+                } else if (msg.tool_calls) {
+                    content = `[TOOL CALLS: ${msg.tool_calls.map((tc: any) => tc.function.name).join(', ')}]`;
+                } else if (msg.content) {
+                    content = '[OBJECT CONTENT]';
+                }
+                console.log(`${chalk.cyan(time)} [${role}] - ${content}`);
             });
-
-            if (message.type === 'user') {
-                const userColor = chalk.hex('#4F46E5');
-                const prefix = chalk.bgHex('#4F46E5').white.bold(` [${index + 1}] ${historyMessages.main.messages.userLabel} `) + userColor(` ${timeStr} `);
-                process.stdout.write(prefix + '\n' + chalk.cyan('❯ ') + chalk.white(message.displayContent || message.content) + '\n\n');
-            } else if (message.type === 'ai' || message.type === 'tool') {
-                const isTool = message.type === 'tool';
-                const label = isTool ? historyMessages.main.messages.toolLabel : historyMessages.main.messages.aiLabel;
-                const aiColor = chalk.hex('#059669');
-                const bgColor = isTool ? chalk.bgYellow.black : chalk.bgHex('#059669').white;
-
-                const prefix = bgColor.bold(` [${index + 1}] ${label} `) + aiColor(` ${timeStr} `);
-                process.stdout.write(prefix + '\n');
-
-                const streamRenderer = new StreamRenderer();
-                const contentToRender = message.displayContent || message.content;
-                const renderedOutput = streamRenderer.processChunk(contentToRender);
-                const finalOutput = streamRenderer.finalize();
-                process.stdout.write(renderedOutput + finalOutput + '\n\n');
+            
+            // 显示Token使用统计
+            const stats = await TokenCalculator.getContextUsageStats(messages, '', 0.8);
+            const statsMessage = historyMessages.main.messages.tokenUsage.tokenStats
+                .replace('{used}', stats.used.toString())
+                .replace('{max}', stats.maxAllowed.toString())
+                .replace('{percentage}', stats.percentage.toString());
+            
+            console.log(chalk.bold.yellow(`\n--- Token Usage ---`));
+            console.log(statsMessage);
+             if (stats.isNearLimit) {
+                console.log(chalk.yellow(historyMessages.main.messages.tokenUsage.nearLimit));
             }
-        });
-
-        const totalMsg = historyMessages.main.messages.totalMessages.replace('{count}', messages.length.toString());
-        process.stdout.write(chalk.gray(`\n${totalMsg}\n\n`));
+        }
+        console.log(chalk.bold.yellow('---------------------\n'));
     }
 }

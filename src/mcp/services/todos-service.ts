@@ -174,6 +174,7 @@ export class TodosService extends BaseMCPService {
             dependencies: t.dependencies || []
         }));
 
+        console.log(this.formatTodosForDisplay(TodosService.todos));
         return this.createSuccessResponse(request.id, TodosService.todos);
     }
 

@@ -688,3 +688,5 @@ ${fileSummaries.join('\n\n')}
     }
   }
 } 
+
+export const projectInitService = new ProjectInitService(); 

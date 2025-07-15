@@ -11,6 +11,7 @@ import { SystemDetector } from '../../services/system-detector';
 import { Messages } from '../../types/language';
 import { AnimationUtils, LoadingController } from '../../utils';
 import type { Message } from '../../utils/token-calculator';
+import { TokenCalculator } from '../../utils/token-calculator';
 import { StreamRenderer } from './stream-renderer';
 
 export interface ChatState {
@@ -139,7 +140,7 @@ export class MessageHandler {
     /**
      * 构建系统消息
      */
-    private buildSystemMessage(langMessages: Messages, selectedTextFiles: string[]): string {
+    private buildSystemMessage(langMessages: Messages, selectedTextFiles: string[], allMessages: Message[]): string {
         const apiConfig = StorageService.getApiConfig();
 
         // 构建系统消息
@@ -160,29 +161,8 @@ export class MessageHandler {
             promptParts.push(apiConfig.role);
         }
 
-        // Add Todos prompt
-        const todos = TodosService.getTodos();
-        const pendingTodos = todos.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
-
-        if (pendingTodos.length > 0) {
-            const todoListString = pendingTodos.map(t => {
-                const statusIcon = t.status === 'in_progress' ? '▶️' : '⚪️';
-                return `${statusIcon} ${t.content} (id: ${t.id})`;
-            }).join('\n');
-
-            const todoPrompt = `You are in the middle of a multi-step task. You MUST follow the plan in the todo list.
-1. Identify the next 'pending' task.
-2. Execute the task using the appropriate tool(s).
-3. IMMEDIATELY after successful execution, call the 'update_todos' tool to mark the task as 'completed'.
-This entire sequence (execute and update) should happen in a single response. Do not ask for permission, just proceed.
-
-Current Todos:
-${todoListString}`;
-            promptParts.push(todoPrompt);
-        } else {
-            const programmingTaskPrompt = `**important : If the user's request involves a programming task, you MUST first use the 'create_todos' tool to generate a comprehensive, step-by-step plan.**`;
-            promptParts.push(programmingTaskPrompt);
-        }
+        // The logic for adding todos has been moved to buildTodoPromptPart.
+        // This function now only builds the static part of the prompt.
 
         // Add a general rule for tool verification
         const toolVerificationPrompt = `**General Tool Interaction Rule:**
@@ -206,11 +186,47 @@ When you see such a message, you MUST:
     }
 
     /**
+     * 构建系统消息中与TODO相关的部分
+     */
+    private buildTodoPromptPart(allMessages: Message[]): string {
+        const todos = TodosService.getTodos();
+        const pendingTodos = todos.filter(t => t.status !== 'completed' && t.status !== 'cancelled');
+
+        if (pendingTodos.length > 0) {
+            const todoListString = pendingTodos.map(t => {
+                const statusIcon = t.status === 'in_progress' ? '▶️' : '⚪️';
+                return `${statusIcon} ${t.content} (id: ${t.id})`;
+            }).join('\n');
+
+            const lastUserMessage = allMessages.filter(m => m.type === 'user').pop();
+            const userTask = lastUserMessage ? this.cleanFileReferencesInMessage(lastUserMessage.content as string) : "the user's request";
+
+            return `**CRITICAL: Your primary objective is to complete the user's request: "${userTask}"**
+
+You have a plan to achieve this. You MUST follow the steps below.
+1.  Identify the next 'pending' task.
+2.  Execute it using the necessary tool(s).
+3.  IMMEDIATELY after successful execution, use the 'update_todos' tool to mark the task 'completed'.
+This sequence is a single, atomic operation. Proceed without asking for confirmation.
+
+Current Plan *Todo must be completed. Remember to call the tool 'update_todos' after completion.*:
+${todoListString}
+
+If it has been completed, remember to call the 'update_todos' tool to update the completed item.`;
+        } else {
+            return `**important : If the user's request involves a programming task, you MUST first use the 'create_todos' tool to generate a comprehensive, step-by-step plan.**`;
+        }
+    }
+
+    /**
      * 处理AI请求的主要逻辑
      */
     async processAIRequest(isContinuation: boolean = false): Promise<void> {
-        if (!isContinuation) {
-            // Clear todos at the beginning of a new user-initiated task.
+        // A new user-initiated task is identified if the most recent message is from the user.
+        // This is a more reliable way to determine when to clear the TODO list for a new task.
+        const allCurrentMessages = this.callbacks.getRecentMessages();
+        const lastMessage = allCurrentMessages.length > 0 ? allCurrentMessages[allCurrentMessages.length - 1] : null;
+        if (lastMessage && lastMessage.type === 'user' && !isContinuation) {
             TodosService.clearTodos();
         }
 
@@ -248,127 +264,113 @@ When you see such a message, you MUST:
             }
         };
 
-        let isFirstChunk = true;
-        const resetForNewResponse = () => {
-            isFirstChunk = true;
-            // Also reset the stream renderer to ensure a clean slate for the new response
-            this.streamRenderer.reset();
-        };
-
-        startLoading(); // 首次启动加载动画
-
         try {
-            // 构建聊天消息历史
-            const chatMessages = this.buildChatMessages();
-            // 获取MCP工具
             const tools = await this.getMcpTools();
+            let continueConversation = true;
 
-            let aiResponseContent = '';
-            let assistantMessageDisplayed = false;
+            while (continueConversation) {
+                const chatMessages = await this.buildChatMessages();
+                
+                let isFirstChunk = true;
+                const resetForNewResponse = () => {
+                    isFirstChunk = true;
+                    this.streamRenderer.reset();
+                };
 
-            // 重置流式渲染器
-            this.streamRenderer.reset();
+                resetForNewResponse();
+                startLoading();
 
-            // 流式调用OpenAI
-            await openAIService.streamChat({
-                messages: chatMessages,
-                tools: tools.length > 0 ? tools : undefined,
-                onReasoningChunk: (chunk: string) => {
-                    // No longer displaying reasoning to keep the output clean.
-                },
-                onToolChunk: (toolChunk) => {
-                    // 保持加载动画
-                },
-                onAssistantMessage: ({ content, toolCalls }) => {
-                    stopLoading(); // 在显示内容前停止动画
+                let aiResponseContent = '';
 
-                    const finalContent = this.streamRenderer.finalize();
-                    if (finalContent) {
-                        process.stdout.write(finalContent);
-                    }
-                    // process.stdout.write('\n\n'); // 移除，避免在工具调用中间中断消息流
+                const result = await openAIService.streamChat({
+                    messages: chatMessages,
+                    tools: tools.length > 0 ? tools : undefined,
+                    onReasoningChunk: (chunk: string) => {},
+                    onToolChunk: (toolChunk) => {},
+                    onAssistantMessage: ({ content, toolCalls }) => {
+                        stopLoading();
 
-                    const aiMessage: Message = {
-                        type: 'ai',
-                        content: content, // 原始content可能为空
-                        tool_calls: toolCalls,
-                        displayContent: content,
-                        timestamp: new Date()
-                    };
-                    this.callbacks.addMessage(aiMessage);
-                    assistantMessageDisplayed = true;
-                },
-                onToolCall: async (toolCall: any) => {
-                    // onAssistantMessage 已经停止了动画，这里执行工具调用
-                    const result = await this.handleToolCall(toolCall);
-                    // 在工具调用完成后，立即为下一轮AI响应重置状态
-                    resetForNewResponse();
-                    startLoading(); // 为下一轮AI思考重新启动加载动画
-                    return result;
-                },
-                onChunk: (chunk: string) => {
-                    stopLoading();
-                    if (isFirstChunk) {
-                        // 显示AI回复标签
-                        const timeStr = new Date().toLocaleTimeString(messages.main.messages.format.timeLocale, {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        });
-                        const aiColor = chalk.hex('#059669');
-                        const aiPrefix = chalk.bgHex('#059669').white.bold(` ${messages.main.messages.aiLabel} `) + aiColor(` ${timeStr} `);
-                        process.stdout.write(aiPrefix + '\n');
-                        isFirstChunk = false;
-                    }
+                        const finalContent = this.streamRenderer.finalize();
+                        if (finalContent) {
+                            process.stdout.write(finalContent);
+                        }
 
-                    const formattedChunk = this.streamRenderer.processChunk(chunk);
-                    if (formattedChunk) {
-                        process.stdout.write(formattedChunk);
-                    }
-                    aiResponseContent += chunk;
-                    startLoading();
-                },
-                onComplete: (fullResponse: string) => {
-                    stopLoading(); // 确保流程结束时动画已停止
-
-                    const finalContent = this.streamRenderer.finalize();
-                    if (finalContent) {
-                        process.stdout.write(finalContent);
-                    }
-
-                    // If there was any streamed output or a final response, add newlines for spacing.
-                    if (finalContent || fullResponse) {
-                        process.stdout.write('\n\n');
-                    }
-
-                    // BUGFIX: The original code failed to save the final AI message if a tool call had occurred.
-                    // This is now corrected by removing the `!assistantMessageDisplayed` check and saving
-                    // the final response whenever it's not empty.
-                    if (fullResponse) {
                         const aiMessage: Message = {
                             type: 'ai',
-                            content: fullResponse,
-                            displayContent: fullResponse,
+                            content: content,
+                            tool_calls: toolCalls,
+                            displayContent: content,
                             timestamp: new Date()
                         };
                         this.callbacks.addMessage(aiMessage);
+                    },
+                    onChunk: (chunk: string) => {
+                        stopLoading();
+                        if (isFirstChunk) {
+                            const timeStr = new Date().toLocaleTimeString(messages.main.messages.format.timeLocale, {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                            const aiColor = chalk.hex('#059669');
+                            const aiPrefix = chalk.bgHex('#059669').white.bold(` ${messages.main.messages.aiLabel} `) + aiColor(` ${timeStr} `);
+                            process.stdout.write(aiPrefix + '\n');
+                            isFirstChunk = false;
+                        }
+
+                        const formattedChunk = this.streamRenderer.processChunk(chunk);
+                        if (formattedChunk) {
+                            process.stdout.write(formattedChunk);
+                        }
+                        aiResponseContent += chunk;
+                        startLoading();
+                    },
+                    onComplete: (fullResponse: string) => {
+                        stopLoading();
+
+                        const finalContent = this.streamRenderer.finalize();
+                        if (finalContent) {
+                            process.stdout.write(finalContent);
+                        }
+
+                        if (finalContent || fullResponse) {
+                            process.stdout.write('\n\n');
+                        }
+                        
+                        if (fullResponse) {
+                            const aiMessage: Message = {
+                                type: 'ai',
+                                content: fullResponse,
+                                displayContent: fullResponse,
+                                timestamp: new Date()
+                            };
+                            this.callbacks.addMessage(aiMessage);
+                        }
+                    },
+                    onError: (error: Error) => {
+                        stopLoading();
+                        const errorMsg = `${messages.main.status.connectionError}: ${error.message}`;
+                        process.stdout.write(chalk.red(errorMsg) + '\n\n');
+                        console.log(chalk.gray(JSON.stringify(chatMessages, null, 2)));
+                        continueConversation = false; // Stop loop on error
                     }
+                });
 
-                    // Check if we need to continue the task
-                    // The AI's response turn is complete. Finalize the state.
-                    this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
-                },
-                onError: (error: Error) => {
-                    stopLoading(); // 出错时停止动画
-                    const errorMsg = `${messages.main.status.connectionError}: ${error.message}`;
-                    process.stdout.write(chalk.red(errorMsg) + '\n\n');
-                    this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
+                if (result.status === 'tool_calls') {
+                    stopLoading();
+                    const toolCalls = result.assistantResponse.tool_calls || [];
+                    for (const toolCall of toolCalls) {
+                        await this.handleToolCall(toolCall);
+                    }
+                    // Continue loop to let AI respond to tool results
+                } else {
+                    continueConversation = false; // 'done' or error
                 }
-            });
-
+            }
         } catch (error) {
-            stopLoading(); // 捕获同步错误
+            stopLoading();
             const errorMsg = error instanceof Error ? error.message : messages.main.status.unknownError;
             process.stdout.write(chalk.red(`${messages.main.status.connectionError}: ${errorMsg}`) + '\n\n');
+        } finally {
             this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
         }
     }
@@ -380,17 +382,6 @@ When you see such a message, you MUST:
         try {
             const systemDetector = this.callbacks.getSystemDetector();
             const tools = await systemDetector.getAllToolDefinitions();
-
-            // 调试信息：显示加载的工具
-            // if (tools.length > 0) {
-            //     const messages = languageService.getMessages();
-            //     console.log(chalk.gray(`🐛 🛠️ 已加载 ${tools.length} 个MCP工具: ${tools.map(t => t.function.name).join(', ')}`));
-            //     // 显示第一个工具的详细信息
-            //     if (tools[0]) {
-            //         console.log(chalk.gray(`🐛 第一个工具详情: ${JSON.stringify(tools[0], null, 2)}`));
-            //     }
-            // }
-
             return tools;
         } catch (error) {
             console.warn('Failed to get MCP tools:', error);
@@ -401,49 +392,63 @@ When you see such a message, you MUST:
     /**
      * 处理工具调用
      */
-    private async handleToolCall(toolCall: any): Promise<any> {
+    private async handleToolCall(toolCall: any): Promise<void> {
         try {
             const messages = languageService.getMessages();
             const functionName = toolCall.function.name;
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
             console.log(chalk.yellow.bold(`${messages.main.messages.toolCall.calling.replace('{name}', functionName)}`));
-
-            // 截断并打印参数，防止过长的参数刷屏
-            // const paramsString = JSON.stringify(parameters, null, 2);
-            // if (paramsString !== '{}') { // 只在有参数时打印
-            //     const truncatedParams = paramsString.length > 100 ? `${paramsString.substring(0, 100)}...` : paramsString;
-            //     console.log(chalk.gray(`parameters: ${truncatedParams}`));
-            // }
-
-            // 检查是否需要用户确认
+            
             const needsConfirmation = StorageService.isFunctionConfirmationRequired(functionName);
 
             if (needsConfirmation) {
                 let diff: string | undefined;
-                // For file operations, generate a diff before asking for confirmation
-                if (functionName === 'file-system_create_file' || functionName === 'file-system_edit_file') {
+                if (functionName === 'file-system_create_file') {
+                    const targetPath = path.resolve(parameters.path);
+                    const newContent = parameters.content || '';
+                    diff = createPatch(targetPath, '', newContent, '', '', { context: 3 });
+                } else if (functionName === 'file-system_edit_file') {
                     const targetPath = path.resolve(parameters.path);
                     let originalContent = '';
                     if (fs.existsSync(targetPath)) {
                         originalContent = fs.readFileSync(targetPath, 'utf8');
                     }
-                    const newContent = parameters.content || parameters.newContent || '';
-                    diff = createPatch(targetPath, originalContent, newContent);
+
+                    const { startLine, endLine, newContent } = parameters;
+                    const originalSlice = originalContent.split('\n').slice(startLine - 1, endLine).join('\n');
+                    const partialPatch = createPatch(targetPath, originalSlice, newContent, '', '', { context: 3 });
+
+                    const newContentLineCount = newContent === '' ? 0 : newContent.split('\n').length;
+                    const oldContentLineCount = endLine - startLine + 1;
+                    const correctHeader = `@@ -${startLine},${oldContentLineCount} +${startLine},${newContentLineCount} @@`;
+
+                    const patchLines = partialPatch.split('\n');
+                    const hunkHeaderIndex = patchLines.findIndex(line => line.startsWith('@@'));
+                    if (hunkHeaderIndex !== -1) {
+                        patchLines[hunkHeaderIndex] = correctHeader;
+                        diff = patchLines.join('\n');
+                    } else {
+                        diff = partialPatch;
+                    }
                 }
 
                 const shouldExecute = await this.askUserConfirmation(functionName, parameters, diff);
 
                 if (!shouldExecute) {
-                    // 用户拒绝执行
                     const rejectionMessage = `User rejected the tool call: ${functionName}`;
                     console.log(chalk.yellow(messages.main.messages.toolCall.rejected));
 
-                    // 返回拒绝信息给AI
-                    return {
+                    const toolResultMessage: Message = {
+                        type: 'tool',
                         tool_call_id: toolCall.id,
-                        error: rejectionMessage,
+                        name: functionName,
+                        content: { error: rejectionMessage },
+                        displayContent: `⚠️ **Tool Result: ${functionName}**\n\n${rejectionMessage}`,
+                        timestamp: new Date()
                     };
+                    this.callbacks.addMessage(toolResultMessage);
+                    return;
                 }
                 console.log(chalk.green(messages.main.messages.toolCall.approved));
             }
@@ -451,13 +456,6 @@ When you see such a message, you MUST:
             const systemDetector = this.callbacks.getSystemDetector();
             const result = await systemDetector.executeMcpTool(functionName, parameters);
 
-            // The system message is now built once at the start of processAIRequest
-            // and is part of the `chatMessages` array passed to the streamChat call.
-            // No need to update it here as the whole message history will be rebuilt on the next turn.
-
-            // console.log(result);
-
-            // 将工具调用结果添加到历史记录
             let resultContent = '';
             if (result && typeof result === 'object') {
                 if (result.diff) {
@@ -493,24 +491,21 @@ When you see such a message, you MUST:
             const toolResultMessage: Message = {
                 type: 'tool',
                 tool_call_id: toolCall.id,
-                name: functionName, // <-- Add function name here
-                content: result, // 存储原始结果
-                displayContent: resultContent, // 存储格式化后的显示内容
+                name: functionName,
+                content: result ?? 'SUCCESS',
+                displayContent: resultContent,
                 timestamp: new Date()
             };
             this.callbacks.addMessage(toolResultMessage);
-
-            return result;
         } catch (error) {
             const messages = languageService.getMessages();
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
             console.log(chalk.red(messages.main.messages.toolCall.failed.replace('{error}', errorMsg)));
 
-            // 将工具调用错误也添加到历史记录
             const errorMessage: Message = {
                 type: 'tool',
                 tool_call_id: toolCall.id,
-                name: toolCall.function?.name || 'Unknown', // <-- Add function name here
+                name: toolCall.function?.name || 'Unknown',
                 content: {
                     error: errorMsg,
                     tool_call_id: toolCall.id,
@@ -519,8 +514,6 @@ When you see such a message, you MUST:
                 timestamp: new Date()
             };
             this.callbacks.addMessage(errorMessage);
-
-            throw error;
         }
     }
 
@@ -534,8 +527,8 @@ When you see such a message, you MUST:
 
         console.log();
         console.log(chalk.yellow(messages.main.messages.toolCall.handle));
-        console.log(chalk.white(`Tool: ${chalk.bold(functionName)}`));
-        console.log(chalk.white(`Parameters: ${chalk.gray(JSON.stringify(parameters, null, 2))}`));
+        // console.log(chalk.white(`Tool: ${chalk.bold(functionName)}`));
+        // console.log(chalk.white(`Parameters: ${chalk.gray(JSON.stringify(parameters, null, 2))}`));
 
         if (diff) {
             console.log(chalk.yellow.bold('--- Proposed Changes ---'));
@@ -616,21 +609,41 @@ When you see such a message, you MUST:
     /**
      * 构建包含历史记录和文件信息的聊天消息
      */
-    private buildChatMessages(): ChatMessage[] {
-        const recentMessages = this.callbacks.getRecentMessages(20);
-        const systemDetector = this.callbacks.getSystemDetector();
-        const chatMessages: ChatMessage[] = [];
+    private async buildChatMessages(): Promise<ChatMessage[]> {
         const langMessages = languageService.getMessages();
         const selectedTextFiles = this.callbacks.getSelectedTextFiles();
+        
+        // 1. Get the complete message history ONCE.
+        const allMessages = this.callbacks.getRecentMessages();
 
-        // 构建系统消息
-        const systemMessage = this.buildSystemMessage(langMessages, selectedTextFiles);
+        // 2. Build the static part of the system message.
+        const baseSystemMessage = this.buildSystemMessage(langMessages, selectedTextFiles, allMessages);
+        
+        // 3. Append the dynamic TODO part to the system message
+        const todoPromptPart = this.buildTodoPromptPart(allMessages);
+        
+        // 4. Use TokenCalculator to intelligently select and compress the history.
+        // This is now an async call.
+        const tokenResult = await TokenCalculator.selectHistoryMessages(
+            allMessages,
+            `${baseSystemMessage}\n\n${todoPromptPart}`,
+            0.7 // Use 70% of context to leave room for tool calls
+        );
+        
+        const summaryPromptPart = tokenResult.summary ? `\n\n[Prior conversation summary: ${tokenResult.summary}]` : '';
+        const systemMessageContent = `${baseSystemMessage}\n\n${todoPromptPart}${summaryPromptPart}`;
 
-        if (systemMessage) {
-            chatMessages.push({ role: 'system', content: systemMessage });
+
+        // `tokenResult.allowedMessages` is now an array that both fits the token limit and is guaranteed to start with a user message.
+        const recentMessages = tokenResult.allowedMessages;
+
+        // 5. Build the final chatMessages array.
+        const chatMessages: ChatMessage[] = [];
+        if (systemMessageContent) {
+            chatMessages.push({ role: 'system', content: systemMessageContent });
         }
 
-        // 转换消息历史，并确保 'tool' 消息的合法性
+        // 6. Convert the selected message history for the API, ensuring tool messages are valid.
         let expectedToolMessages = 0;
         for (const msg of (recentMessages as any[])) {
             if (msg.type === 'user') {
@@ -640,7 +653,7 @@ When you see such a message, you MUST:
             } else if (msg.type === 'ai') {
                 const assistantMessage: ChatMessage = {
                     role: 'assistant',
-                    content: msg.content || null, // Ensure content is not undefined
+                    content: msg.content || null,
                     tool_calls: msg.tool_calls,
                 };
                 chatMessages.push(assistantMessage);
@@ -650,13 +663,11 @@ When you see such a message, you MUST:
                     expectedToolMessages = 0;
                 }
             } else if (msg.type === 'tool') {
-                // 关键检查：只在期望有工具消息时才添加，防止孤立的工具消息导致API错误
                 if (expectedToolMessages > 0) {
                     const toolMessage: ChatMessage = {
                         role: 'tool',
                         tool_call_id: msg.tool_call_id,
-                        name: (msg as any).name,
-                        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? null),
                     };
                     chatMessages.push(toolMessage);
                     expectedToolMessages--;

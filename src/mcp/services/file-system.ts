@@ -175,7 +175,7 @@ export class FileSystemService extends BaseMCPService {
             // File editing tool
             {
                 name: 'edit_file',
-                description: 'Edit a file by replacing a specific range of lines with new content. This is the primary tool for modifying existing code. To avoid errors, it is recommended to break down large edits into several smaller, sequential calls. First, read the file to get the line numbers, then call this tool.',
+                description: `Edits a file by replacing a range of lines. This is the primary tool for modifying code. For safe and effective editing, follow these steps: 1. **Read First**: Always use 'read_file' to get current line numbers before editing. 2. **Check Syntax**: After every edit, meticulously check for syntax errors like unclosed brackets. 3. **Verify Changes**: Read the file again after editing to confirm changes. 4. **Use Terminal**: For complex changes, use the terminal to run tests or linters to catch issues from atomic edits.`,
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -306,7 +306,7 @@ export class FileSystemService extends BaseMCPService {
             const tokenCount = this.estimateTokenCount(finalContent);
 
             const message = `✅ **File read successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Lines:** ${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines}\n**Tokens:** ~${tokenCount}\n**Modified:** ${stats.mtime.toLocaleString()}\n\n${isPartial ? '*Partial content - use startLine/endLine to read different sections.*' : '*Complete file content loaded.*'}`;
-
+            console.log(`📃 : ${targetPath}(${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines})`);
             const response = `${message}\n\n---\n\n${finalContent}`;
 
             return this.createSuccessResponse(request.id, response);
@@ -357,6 +357,8 @@ export class FileSystemService extends BaseMCPService {
 
             const resultMessage = `✅ **Directory listed successfully**\n\n**Path:** \`${targetPath}\`\n**Contains:** ${totalFiles} files, ${totalDirectories} directories\n\n${structure}`;
 
+            console.log(structure);
+
             return this.createSuccessResponse(request.id, resultMessage);
 
         } catch (error) {
@@ -385,10 +387,10 @@ export class FileSystemService extends BaseMCPService {
             }
 
             const resultMessage = `✅ **File search results for "${query as string}"**\n\nFound ${foundFiles.length} files:\n\n${foundFiles.map(f => `- \`${path.relative(process.cwd(), f)}\``).join('\n')}`;
-            
+
             const consoleOutput = `✅ File search results for "${query as string}"\nFound ${foundFiles.length} files:\n${foundFiles.map(f => `  - ${path.relative(process.cwd(), f)}`).join('\n')}`;
             console.log(highlight(consoleOutput, { language: 'markdown', ignoreIllegals: true }));
-            
+
             return this.createSuccessResponse(request.id, resultMessage);
         } catch (error) {
             return this.handleFileReadError(request.id, basePath as string, error);
@@ -454,7 +456,7 @@ export class FileSystemService extends BaseMCPService {
             for (const [filePath, matches] of matchingResults.entries()) {
                 const language = getLanguageForFile(filePath);
                 const codeBlockForUi = matches.map(match => `${match.lineNumber}: ${match.lineContent}`).join('\n');
-                
+
                 resultMessage += `\n**File:** \`${filePath}\`\n\`\`\`${language}\n${codeBlockForUi}\n\`\`\`\n`;
 
                 const codeBlockForConsole = matches.map(match => {
@@ -590,6 +592,7 @@ export class FileSystemService extends BaseMCPService {
 
                 const resultMessage = `✅ **Directory deleted successfully**\n\n**Directory:** \`${targetPath}\`\n${recursive ? `**Items deleted:** ${filesDeleted} files, ${directoriesDeleted} directories\n` : '**Status:** Empty directory removed\n'}\n*Directory and contents have been permanently deleted.*`;
 
+                console.log(`🗑️ : ${targetPath}`);
                 return this.createSuccessResponse(request.id, resultMessage);
 
             } else {
@@ -598,6 +601,8 @@ export class FileSystemService extends BaseMCPService {
                 fs.unlinkSync(targetPath);
 
                 const resultMessage = `✅ **File deleted successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(fileSize)}\n\n*File has been permanently deleted.*`;
+
+                console.log(`🗑️ : ${targetPath}`);
 
                 return this.createSuccessResponse(request.id, resultMessage);
             }
@@ -647,6 +652,8 @@ export class FileSystemService extends BaseMCPService {
 
             const resultMessage = `✅ **Directory created successfully**\n\n**Directory:** \`${targetPath}\`\n**Created:** ${stats.birthtime.toISOString()}\n${parentCreated ? '**Parent directories:** Created automatically\n' : ''}\n*Directory is ready for use.*`;
 
+            console.log(`📁 : ${targetPath}`);
+
             return this.createSuccessResponse(request.id, resultMessage);
 
         } catch (error) {
@@ -686,23 +693,24 @@ export class FileSystemService extends BaseMCPService {
                 return this.createSuccessResponse(request.id, `❌ **Error: Invalid line range**\n\nStart line (${params.startLine}) cannot be greater than end line (${params.endLine}).\n\n*Please ensure startLine ≤ endLine.*`);
             }
 
-            // Perform the edit with robust out-of-bounds handling
-            const effectiveEndLine = Math.min(params.endLine, totalLines);
+            // Perform the edit with robust out-of-bounds handling using splice
             const newContentLines = params.newContent === '' ? [] : params.newContent.split('\n');
-            const beforeLines = lines.slice(0, params.startLine - 1);
+            const startIndex = params.startLine - 1;
 
-            // If startLine is out of bounds, afterLines should be empty. Otherwise, slice from effectiveEndLine.
-            const afterLines = params.startLine > totalLines ? [] : lines.slice(effectiveEndLine);
-
-            let paddingLines: string[] = [];
-            if (params.startLine > totalLines + 1) {
-                // Add padding if the edit starts more than one line after the end of the file
-                paddingLines = Array(params.startLine - totalLines - 1).fill('');
+            // If startLine is past the end, we might need to add padding
+            if (startIndex > lines.length) {
+                const padding = Array(startIndex - lines.length).fill('');
+                lines.push(...padding);
             }
 
-            const editedLines = [...beforeLines, ...paddingLines, ...newContentLines, ...afterLines];
+            // Calculate how many lines to delete
+            const effectiveEndIndex = Math.min(params.endLine, lines.length);
+            const deleteCount = Math.max(0, effectiveEndIndex - startIndex);
 
-            const editedContent = editedLines.join('\n');
+            lines.splice(startIndex, deleteCount, ...newContentLines);
+
+            const editedContent = lines.join('\n');
+            const editedLines = lines; // For later use in response generation
 
             // Write the edited content back to the file
             fs.writeFileSync(targetPath, editedContent, encoding as BufferEncoding);
@@ -735,13 +743,30 @@ ${codeBlock}
 - If the edit is incorrect or contains syntax errors, use the \`edit_file\` tool to make corrections.
 - **Important tip: you can use the terminal tool 'execute_command' to run commands, such as 'node --check script.js' or the VSCode 'code' command to check for syntax errors.**`;
 
-            const diff = createPatch(targetPath, originalContent, editedContent);
+            // Create a diff for only the changed portion, but with correct line numbers
+            const originalSlice = originalContent.split('\n').slice(params.startLine - 1, params.endLine).join('\n');
+            const newSlice = params.newContent;
+
+            // Create a patch with incorrect line numbers first
+            const partialPatch = createPatch(params.path, originalSlice, newSlice, '', '', { context: 3 });
+
+            // Manually correct the hunk header line numbers
+            const oldContentLineCount = params.endLine - params.startLine + 1;
+            const correctHeader = `@@ -${params.startLine},${oldContentLineCount} +${params.startLine},${newContentLineCount} @@`;
+
+            const patchLines = partialPatch.split('\n');
+            let diff = partialPatch;
+            // The header is usually at index 2, but we search for it to be safe
+            const hunkHeaderIndex = patchLines.findIndex(line => line.startsWith('@@'));
+            if (hunkHeaderIndex !== -1) {
+                patchLines[hunkHeaderIndex] = correctHeader;
+                diff = patchLines.join('\n');
+            }
             const needsConfirmation = StorageService.isFunctionConfirmationRequired('file-system_edit_file');
             if (!needsConfirmation) {
                 console.log(highlight(diff, { language: 'diff', ignoreIllegals: true }));
             }
-            const finalMessage = `${resultMessage}\n\n**Changes:**\n\`\`\`diff\n${diff}\n\`\`\``;
-            return this.createSuccessResponse(request.id, finalMessage);
+            return this.createSuccessResponse(request.id, resultMessage);
 
         } catch (error) {
             return this.handleFileEditError(request.id, params.path, error);

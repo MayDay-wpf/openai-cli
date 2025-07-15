@@ -3,7 +3,7 @@ import { Messages } from '../../types/language';
 export const en: Messages = {
   welcome: {
     starting: 'Initializing...',
-    tagline: 'Powered by AIBotPRO https://aibotpro.cn',
+    tagline: 'Powered by AIBotPRO',
     menuPrompt: 'Select action',
     menuOptions: {
       start: 'Start Application',
@@ -152,6 +152,11 @@ export const en: Messages = {
           '  - (After waiting for user response) Second Response: `<another_tool>{"arg":"value"}</another_tool>`\n' +
           '- **Self-Correction**: If you find yourself or the system generating output similar to the incorrect example above, you must immediately stop and correct your behavior, strictly following the "one tool at a time" and "independent JSON arguments" rules.\n\n' +
           '# Original Tool Usage Instructions:\n' +
+          '- **File Editing Best Practices (MUST be followed)**:\\n' +
+          '  - **Read Before Writing**: Always use `read_file` to get the latest line numbers and content before editing.\\n' +
+          '  - **Check Syntax**: After each edit, carefully check for syntax errors, such as unclosed brackets.\\n' +
+          '  - **Verify Changes**: After editing, read the file again to confirm that the changes have been applied correctly.\\n' +
+          '  - **Use the Terminal**: For complex changes, use the terminal tool (`execute_command`) to run tests or linters to catch errors that may be introduced by atomic edits.\\n\\n' +
           '## File System:\n' +
           '- You are very adept at using tools to better understand projects and assist users in completing tasks.\n' +
           '- You can use tools multiple times without any restrictions.\n' +
