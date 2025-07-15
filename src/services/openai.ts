@@ -24,25 +24,35 @@ export interface StreamChatResult {
 }
 
 class OpenAIService {
-  private openai: OpenAI;
+  private openai: OpenAI | null;
 
   constructor() {
-    const apiConfig = StorageService.getApiConfig();
-    this.openai = new OpenAI({
-      apiKey: apiConfig.apiKey,
-      baseURL: apiConfig.baseUrl
-    });
+    this.openai = null; // Initialize to null
+    this.updateConfig();
   }
 
   public updateConfig() {
     const apiConfig = StorageService.getApiConfig();
-    this.openai = new OpenAI({
-      apiKey: apiConfig.apiKey,
-      baseURL: apiConfig.baseUrl
-    });
+    if (apiConfig.apiKey && apiConfig.apiKey.trim() !== '') {
+      this.openai = new OpenAI({
+        apiKey: apiConfig.apiKey,
+        baseURL: apiConfig.baseUrl,
+      });
+    } else {
+      this.openai = null;
+    }
   }
 
   public async streamChat(options: StreamChatOptions): Promise<StreamChatResult> {
+    if (!this.openai) {
+      const error = new Error("OpenAI API key is not configured. Please run 'openai-cli' and go to 'Configuration' to set it up.");
+      options.onError(error);
+      return {
+        status: 'done',
+        assistantResponse: { content: null }
+      };
+    }
+
     const apiConfig = StorageService.getApiConfig();
 
     // 打印请消息
@@ -147,10 +157,13 @@ class OpenAIService {
   }
 
   public async chat(options: { messages: ChatMessage[], responseFormat?: 'text' | 'json_object', temperature?: number, maxTokens?: number }): Promise<string> {
+    if (!this.openai) {
+      throw new Error("OpenAI API key is not configured. Please run 'openai-cli' and go to 'Configuration' to set it up.");
+    }
     const apiConfig = StorageService.getApiConfig();
     try {
       const response = await this.openai.chat.completions.create({
-        model: apiConfig.model || 'gpt-4-turbo-preview',
+        model: apiConfig.model || 'gpt-4.1',
         messages: options.messages as any,
         response_format: options.responseFormat ? { type: options.responseFormat } : undefined,
         temperature: options.temperature,

@@ -76,6 +76,46 @@ export class StorageService {
   }
 
   /**
+   * 初始化配置文件
+   * 如果配置文件不存在，则创建一个包含默认值的配置文件
+   */
+  static initializeConfig(): void {
+    StorageService.ensureConfigDir();
+    if (!fs.existsSync(StorageService.CONFIG_FILE)) {
+      const defaultConfig = {
+        language: 'zh',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4.1',
+        contextTokens: 128000,
+        maxConcurrency: 5,
+        role: 'You are a professional software engineer.',
+        maxToolCalls: 25,
+        terminalSensitiveWords: [
+          'rm -rf',
+          'mv',
+          'cp',
+          'dd',
+          'npm install',
+          'yarn add',
+          'pnpm install',
+          'git commit --amend',
+          'git push --force',
+        ],
+        mcpConfig: {
+          mcpServers: {}
+        }
+      };
+      // 确保内置服务也添加到默认配置中
+      const finalConfig = {
+        ...defaultConfig,
+        mcpConfig: StorageService.ensureBuiltInMcpServices(defaultConfig.mcpConfig)
+      };
+      StorageService.writeConfig(finalConfig);
+    }
+  }
+
+  /**
    * 获取保存的语言设置
    */
   static getSavedLanguage(): Language | null {

@@ -30,8 +30,10 @@ program
 program
   .action(async () => {
     try {
-      // 更新MCP配置（修复旧配置）
       const { StorageService } = await import('./services/storage');
+      StorageService.initializeConfig();
+
+      // 更新MCP配置（修复旧配置）
       StorageService.updateMcpConfig();
 
       // 初始化系统MCP服务
