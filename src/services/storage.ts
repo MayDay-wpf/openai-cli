@@ -83,7 +83,7 @@ export class StorageService {
     StorageService.ensureConfigDir();
     if (!fs.existsSync(StorageService.CONFIG_FILE)) {
       const defaultConfig = {
-        language: 'zh',
+        language: 'en',
         baseUrl: 'https://api.openai.com/v1',
         apiKey: '',
         model: 'gpt-4.1',
