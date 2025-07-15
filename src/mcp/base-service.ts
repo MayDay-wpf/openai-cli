@@ -48,12 +48,12 @@ export abstract class BaseMCPService {
   // 验证请求参数
   protected validateParams(params: any, required: string[]): string | null {
     if (!params) {
-      return '缺少必需参数';
+      return 'Required parameters are missing';
     }
 
     for (const field of required) {
       if (!(field in params) || params[field] === undefined || params[field] === null) {
-        return `缺少必需参数: ${field}`;
+        return `Required parameters are missing: ${field}`;
       }
     }
 

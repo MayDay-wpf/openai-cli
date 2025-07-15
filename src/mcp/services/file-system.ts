@@ -70,6 +70,44 @@ export class FileSystemService extends BaseMCPService {
                     required: ['path']
                 }
             },
+            {
+                name: 'search_files',
+                description: '通过文件名搜索文件。当用户没有提及文件路径时，主动搜索文件。',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        query: {
+                            type: 'string',
+                            description: '要搜索的文件名或部分文件名。例如: "service.ts"'
+                        },
+                        basePath: {
+                            type: 'string',
+                            description: '开始搜索的目录路径。例如: "src/"',
+                            default: '.'
+                        }
+                    },
+                    required: ['query']
+                }
+            },
+            {
+                name: 'search_file_content',
+                description: '模糊查询关键词，获取所有包含该关键词内容的文件路径。当用户没有提及文件，只提及某个函数或功能时，主动搜索。',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        keyword: {
+                            type: 'string',
+                            description: '要搜索的关键词或代码片段。例如: "handleReadFile"'
+                        },
+                        basePath: {
+                            type: 'string',
+                            description: '开始搜索的目录路径。例如: "src/"',
+                            default: '.'
+                        }
+                    },
+                    required: ['keyword']
+                }
+            },
             // File operation tools
             {
                 name: 'create_file',
@@ -179,6 +217,10 @@ export class FileSystemService extends BaseMCPService {
                     return await this.handleReadFile(request);
                 case 'list_directory':
                     return await this.handleListDirectory(request);
+                case 'search_files':
+                    return await this.handleSearchFiles(request);
+                case 'search_file_content':
+                    return await this.handleSearchFileContent(request);
                 case 'create_file':
                     return await this.handleCreateFile(request);
                 case 'delete_file':
@@ -320,6 +362,145 @@ export class FileSystemService extends BaseMCPService {
         } catch (error) {
             return this.handleFileReadError(request.id, params.path, error);
         }
+    }
+
+    private async handleSearchFiles(request: MCPRequest): Promise<MCPResponse> {
+        const validationError = this.validateParams(request.params, ['query']);
+        if (validationError) {
+            return this.createErrorResponse(request.id, -32602, validationError);
+        }
+
+        const { query, basePath = '.' } = request.params;
+        const startPath = path.resolve(basePath as string);
+
+        try {
+            const foundFiles = this.findFilesRecursive(
+                startPath,
+                (filePath) => path.basename(filePath).includes(query as string),
+                (dirPath) => !['node_modules', '.git'].some(excluded => path.basename(dirPath) === excluded)
+            );
+
+            if (foundFiles.length === 0) {
+                return this.createSuccessResponse(request.id, `🟡 **No files found for "${query as string}"**\n\nYour search did not match any files.\n\nPossible solutions:\n- Check your spelling\n- Try a different or broader query\n- Specify a different base path to search in`);
+            }
+
+            const resultMessage = `✅ **File search results for "${query as string}"**\n\nFound ${foundFiles.length} files:\n\n${foundFiles.map(f => `- \`${path.relative(process.cwd(), f)}\``).join('\n')}`;
+            
+            const consoleOutput = `✅ File search results for "${query as string}"\nFound ${foundFiles.length} files:\n${foundFiles.map(f => `  - ${path.relative(process.cwd(), f)}`).join('\n')}`;
+            console.log(highlight(consoleOutput, { language: 'markdown', ignoreIllegals: true }));
+            
+            return this.createSuccessResponse(request.id, resultMessage);
+        } catch (error) {
+            return this.handleFileReadError(request.id, basePath as string, error);
+        }
+    }
+
+    private async handleSearchFileContent(request: MCPRequest): Promise<MCPResponse> {
+        const validationError = this.validateParams(request.params, ['keyword']);
+        if (validationError) {
+            return this.createErrorResponse(request.id, -32602, validationError);
+        }
+
+        const { keyword, basePath = '.' } = request.params;
+        const startPath = path.resolve(basePath as string);
+        const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.zip', '.pdf', '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.ico'];
+
+        try {
+            const matchingResults = new Map<string, { lineNumber: number; lineContent: string }[]>();
+            const allFiles = this.findFilesRecursive(
+                startPath,
+                () => true,
+                (dirPath) => !['node_modules', '.git'].some(excluded => path.basename(dirPath) === excluded)
+            );
+
+            for (const file of allFiles) {
+                if (binaryExtensions.includes(path.extname(file).toLowerCase())) {
+                    continue;
+                }
+
+                try {
+                    const stats = fs.statSync(file);
+                    if (stats.size > 2 * 1024 * 1024) { // 2MB limit
+                        continue;
+                    }
+
+                    const content = fs.readFileSync(file, 'utf-8');
+                    const lines = content.split('\n');
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (line.includes(keyword as string)) {
+                            const relativePath = path.relative(process.cwd(), file);
+                            if (!matchingResults.has(relativePath)) {
+                                matchingResults.set(relativePath, []);
+                            }
+                            matchingResults.get(relativePath)!.push({
+                                lineNumber: i + 1,
+                                lineContent: line.trim()
+                            });
+                        }
+                    }
+                } catch (readError) {
+                    // Ignore file read errors (e.g., permission denied on a specific file)
+                }
+            }
+
+            if (matchingResults.size === 0) {
+                return this.createSuccessResponse(request.id, `🟡 **No content matches for "${keyword as string}"**\n\nYour search did not find any files containing the keyword.\n\nPossible solutions:\n- Check your spelling or try different keywords\n- Widen the search by changing the base path\n- The content may be in a file type that is excluded from search (e.g., binary files)`);
+            }
+
+            let resultMessage = `✅ **Content search results for "${keyword as string}"**\n\nFound keyword in ${matchingResults.size} files:\n`;
+            let consoleOutput = `✅ Content search results for "${keyword as string}"\nFound keyword in ${matchingResults.size} files:\n`;
+
+            for (const [filePath, matches] of matchingResults.entries()) {
+                const language = getLanguageForFile(filePath);
+                const codeBlockForUi = matches.map(match => `${match.lineNumber}: ${match.lineContent}`).join('\n');
+                
+                resultMessage += `\n**File:** \`${filePath}\`\n\`\`\`${language}\n${codeBlockForUi}\n\`\`\`\n`;
+
+                const codeBlockForConsole = matches.map(match => {
+                    const lineNum = `${match.lineNumber}`.padStart(5, ' ');
+                    return `${lineNum}: ${match.lineContent}`;
+                }).join('\n');
+
+                consoleOutput += `\n--------------------\nFile: ${filePath}\n--------------------\n`;
+                consoleOutput += `${highlight(codeBlockForConsole, { language, ignoreIllegals: true })}\n`;
+            }
+
+            console.log(consoleOutput);
+            return this.createSuccessResponse(request.id, resultMessage);
+        } catch (error) {
+            return this.handleFileReadError(request.id, basePath as string, error);
+        }
+    }
+
+    private findFilesRecursive(
+        startPath: string,
+        fileFilter: (filePath: string) => boolean,
+        dirFilter: (dirPath: string) => boolean
+    ): string[] {
+        let results: string[] = [];
+        try {
+            if (!fs.existsSync(startPath)) {
+                return [];
+            }
+            const items = fs.readdirSync(startPath, { withFileTypes: true });
+
+            for (const item of items) {
+                const fullPath = path.join(startPath, item.name);
+                if (item.isDirectory()) {
+                    if (dirFilter(fullPath)) {
+                        results = results.concat(this.findFilesRecursive(fullPath, fileFilter, dirFilter));
+                    }
+                } else if (item.isFile()) {
+                    if (fileFilter(fullPath)) {
+                        results.push(fullPath);
+                    }
+                }
+            }
+        } catch (error) {
+            // Ignore errors like permission denied for a directory
+        }
+        return results;
     }
 
     // File operation methods (from file-operations.ts)
@@ -544,13 +725,15 @@ export class FileSystemService extends BaseMCPService {
 
 AI has modified the file. Below is the code block surrounding the edit (lines ${params.startLine}-${params.startLine + newContentLineCount - 1}).
 
-**CRITICAL ACTION: Review the code block below to ensure the edit is correct.**
+**CRITICAL ACTION: Review the code block below to ensure the edit is correct and free of syntax errors.**
+**Please carefully check for any mismatched or missing brackets, parentheses, or tags.**
 \`\`\`${language}
 ${codeBlock}
 \`\`\`
 
 - If the edit is correct, reply: \`✔checked\`
-- If the edit is incorrect, use \`edit_file\` to fix it.`;
+- If the edit is incorrect or contains syntax errors, use the \`edit_file\` tool to make corrections.
+- **Important tip: you can use the terminal tool 'execute_command' to run commands, such as 'node --check script.js' or the VSCode 'code' command to check for syntax errors.**`;
 
             const diff = createPatch(targetPath, originalContent, editedContent);
             const needsConfirmation = StorageService.isFunctionConfirmationRequired('file-system_edit_file');

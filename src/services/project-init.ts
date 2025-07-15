@@ -121,30 +121,30 @@ export class ProjectInitService {
     const chatMessages: ChatMessage[] = [
       {
         role: 'system',
-        content: `你是一个专业的项目分析师。请分析项目结构并返回JSON格式的项目信息。
+        content: `You are a professional project analyst. Please analyze the project structure and return project information in JSON format.
 
-要求：
-1. 分析项目的主要功能和用途
-2. 识别使用的技术栈
-3. 判断项目类型（web应用、CLI工具、库等）
-4. 用中文描述
+Requirements:
+1. Analyze the main functions and uses of the project
+2. Identify the technologies used
+3. Determine the project type (web application, CLI tool, library, etc.)
+4. Use English to describe
 
-返回格式：
+Return format:
 {
-  "name": "项目名称",
-  "description": "项目描述（2-3句话）",
-  "techStack": ["技术1", "技术2"],
-  "type": "项目类型"
+  "name": "Project name",
+  "description": "Project description (2-3 sentences)",
+  "techStack": ["Technology 1", "Technology 2"],
+  "type": "Project type"
 }`
       },
       {
         role: 'user',
-        content: `分析以下项目：
+        content: `Analyze the following project:
 
-项目路径：${this.projectRoot}
-Package.json信息：${JSON.stringify(packageInfo, null, 2)}
+Project path: ${this.projectRoot}
+Package.json information: ${JSON.stringify(packageInfo, null, 2)}
 
-主要文件：
+Main files:
 ${fileList}`
       }
     ];
@@ -160,17 +160,17 @@ ${fileList}`
       const parsed = JSON.parse(result);
       return {
         name: parsed.name || packageInfo.name || path.basename(this.projectRoot),
-        description: parsed.description || '项目描述待完善',
+        description: parsed.description || 'Project description to be completed',
         techStack: Array.isArray(parsed.techStack) ? parsed.techStack : this.detectTechStack(files),
-        type: parsed.type || '其他项目'
+        type: parsed.type || 'Other projects'
       };
     } catch (error) {
       // AI 分析失败时，返回默认分析结果
       return {
         name: packageInfo.name || path.basename(this.projectRoot),
-        description: packageInfo.description || '项目描述待完善',
+        description: packageInfo.description || 'Project description to be completed',
         techStack: this.detectTechStack(files),
-        type: '其他项目'
+        type: 'Other projects'
       };
     }
   }

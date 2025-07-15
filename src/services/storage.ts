@@ -12,6 +12,7 @@ export interface ApiConfig {
   maxConcurrency?: number;
   role?: string;
   maxToolCalls?: number;
+  terminalSensitiveWords?: string[];
 }
 
 export interface McpFunctionConfirmationConfig {
@@ -104,6 +105,17 @@ export class StorageService {
       maxConcurrency: config.maxConcurrency || 5,
       role: config.role,
       maxToolCalls: config.maxToolCalls || 25,
+      terminalSensitiveWords: config.terminalSensitiveWords || [
+        'rm -rf',
+        'mv',
+        'cp',
+        'dd',
+        'npm install',
+        'yarn add',
+        'pnpm install',
+        'git commit --amend',
+        'git push --force',
+      ],
     };
   }
 
@@ -167,6 +179,15 @@ export class StorageService {
   static saveRole(role: string): void {
     const config = StorageService.readConfig();
     config.role = role;
+    StorageService.writeConfig(config);
+  }
+
+  /**
+   * 保存终端敏感词
+   */
+  static saveTerminalSensitiveWords(words: string[]): void {
+    const config = StorageService.readConfig();
+    config.terminalSensitiveWords = words;
     StorageService.writeConfig(config);
   }
 
@@ -294,6 +315,7 @@ export class StorageService {
     delete config.mcpConfig;
     delete config.mcpFunctionConfirmation;
     delete config.maxToolCalls;
+    delete config.terminalSensitiveWords;
     // 保留语言设置
     // delete config.language;
     StorageService.writeConfig(config);
@@ -352,6 +374,10 @@ export class StorageService {
       'todos': {
         transport: 'builtin',
         description: 'Service for creating and managing a list of tasks (todos) to plan and track work.'
+      },
+      'terminal': {
+        transport: 'builtin',
+        description: 'Service for executing shell commands and getting the output.'
       }
     };
   }

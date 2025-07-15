@@ -407,7 +407,7 @@ When you see such a message, you MUST:
             const functionName = toolCall.function.name;
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
-            console.log(chalk.yellow.bold(` 🛠️ ${messages.main.messages.toolCall.calling.replace('{name}', functionName)}`));
+            console.log(chalk.yellow.bold(`${messages.main.messages.toolCall.calling.replace('{name}', functionName)}`));
 
             // 截断并打印参数，防止过长的参数刷屏
             // const paramsString = JSON.stringify(parameters, null, 2);

@@ -282,6 +282,7 @@ export interface Messages {
       viewConfig: string;
       resetConfig: string;
       back: string;
+      terminalSensitiveWords: string;
     };
     menuDescription: {
       baseUrl: string;
@@ -296,6 +297,7 @@ export interface Messages {
       viewConfig: string;
       resetConfig: string;
       back: string;
+      terminalSensitiveWords: string;
     };
     prompts: {
       baseUrlInput: string;
@@ -317,6 +319,8 @@ export interface Messages {
       mcpFunctionConfirmationPrompt: string;
       confirmMcpFunctionConfirmation: string;
       confirmReset: string;
+      terminalSensitiveWordsInput: string;
+      terminalSensitiveWordsPlaceholder: string;
     };
     messages: {
       configSaved: string;
@@ -338,6 +342,8 @@ export interface Messages {
       mcpFunctionConfirmationSaved: string;
       noMcpFunctionsFound: string;
       mcpFunctionConfirmationInstructions: string;
+      terminalSensitiveWordsEditorPrompt: string;
+      commandExecuting: string;
     };
     labels: {
       baseUrl: string;
@@ -349,6 +355,7 @@ export interface Messages {
       role: string;
       mcpConfig: string;
       mcpFunctionConfirmation: string;
+      terminalSensitiveWords: string;
       status: string;
       configured: string;
       notConfigured: string;

@@ -152,12 +152,25 @@ export const zh: Messages = {
           '  - (等待用户响应后) 第二次回复: `<another_tool>{"arg":"value"}</another_tool>`\n' +
           '- **自我纠正**: 如果你发现自己或系统产生了类似上述错误示例的输出，你必须立即停止并纠正你的行为，严格遵循“一步一工具”和“独立JSON参数”的规则。\n\n' +
           '# 原始工具使用说明:\n' +
+          '## 文件系统类：\n' +
           '- 你非常善用工具来帮助自己更加理解项目获帮助用户完成工作。\n' +
           '- 你可以多次使用工具，且无任何限制。\n' +
           '- 使用任何工具不需要用户同意，你可以直接使用。\n' +
-          '- 尤其要积极使用文件操作工具（如`list_dir`, `read_file`, `edit_file`）来探索项目、理解代码并直接帮助用户解决问题。\n' +
+          '- 尤其要积极使用文件操作工具（如`list_directory`, `read_file`, `edit_file`）来探索项目、理解代码并直接帮助用户解决问题。\n' +
           '- Step By Step 执行原则，不要一次性用工具完成所有工作，而是分步执行，每步完成后，再执行下一步。\n' +
+          '## TODO类：\n' +
+          '- 应对编程任务，你应该积极使用`create_todos`规划任务。\n' +
+          '- 当每完成一个任务，你就要立即使用`update_todos`修改TODO Item的状态。\n' +
+          '- 遇到复杂任务，你可以灵活使用 `add_todos` 工具来修改计划。\n' +
           '*请根据用户的具体需求提供专业的编程建议和解决方案。*\n\n' +
+          '## 终端类：\n' +
+          '- 你应该多使用终端工具检查各种编译错误或引用错误，比如 `node --check script.js` 或 `code .` 或 `npm run build` 或 `dotnet build` 等等符合当前项目的命令来检查语法错误。\n' +
+          '- 当用户需要执行命令时，你应该积极使用`execute_command`工具来执行命令。\n' +
+          '- 当编程任务结束时，你应该积极使用`execute_command`工具来执行构建检查，示例命令：`npm run build` 或 `dotnet build` 以及更多符合当前项目构建的命令。\n' +
+          '# 说明文件:\n' +
+          '项目中存在一个说明文件 sawyou.md，你可以使用`read_file`工具来读取文件内容，并根据文件内容来回答用户的问题。\n' +
+          'sawyou.md 不一定存在 ，当你检查到不存在时，你可以忽略。也可以在后续回答里提醒用户用`/init`命令来生成说明文件。\n' +
+          'sawyou.md 并不是高优先级文件，不存在时，不影响你积极认真全面回答用户的问题。\n' +
           '# 执行环境\n' +
           '- 当前工作目录: {cwd}\n' +
           '- 当前时间: {time}',
@@ -326,6 +339,7 @@ export const zh: Messages = {
       maxToolCalls: '设置最大工具调用次数',
       viewConfig: '查看当前配置',
       resetConfig: '重置所有配置',
+      terminalSensitiveWords: '终端敏感词拦截',
       back: '返回主菜单'
     },
     menuDescription: {
@@ -340,6 +354,7 @@ export const zh: Messages = {
       maxToolCalls: '设置在单轮对话中允许的最大工具调用次数。',
       viewConfig: '查看所有当前的配置值。',
       resetConfig: '将所有设置重置为默认值。',
+      terminalSensitiveWords: '配置终端执行的敏感词列表，支持通配符。',
       back: '返回到主欢迎界面。'
     },
     prompts: {
@@ -361,7 +376,9 @@ export const zh: Messages = {
       mcpConfigPlaceholder: '{\n  "mcpServers": {\n   \n  }\n}',
       mcpFunctionConfirmationPrompt: '选择需要手动确认的 MCP 函数',
       confirmMcpFunctionConfirmation: '是否启用MCP函数手动确认',
-      confirmReset: '确定要重置所有配置吗？此操作不可撤销'
+      confirmReset: '确定要重置所有配置吗？此操作不可撤销',
+      terminalSensitiveWordsInput: '请编辑终端敏感词列表',
+      terminalSensitiveWordsPlaceholder: 'rm -rf\nmv\ncp\ndd'
     },
     messages: {
       configSaved: '配置已成功保存',
@@ -382,7 +399,9 @@ export const zh: Messages = {
       mcpSystemServicesRestored: '已自动恢复缺失的系统MCP服务',
       mcpFunctionConfirmationSaved: 'MCP函数确认设置已保存',
       noMcpFunctionsFound: '未找到可用的MCP函数',
-      mcpFunctionConfirmationInstructions: '操作说明: [空格]选中/取消  [a]全选  [i]全反选  [Enter]保存'
+      mcpFunctionConfirmationInstructions: '操作说明: [空格]选中/取消  [a]全选  [i]全反选  [Enter]保存',
+      terminalSensitiveWordsEditorPrompt: '每行一个敏感词，支持 * 通配符',
+      commandExecuting: '命令执行中'
     },
     labels: {
       baseUrl: 'API 基础地址',
@@ -394,6 +413,7 @@ export const zh: Messages = {
       role: '系统角色',
       mcpConfig: 'MCP服务配置',
       mcpFunctionConfirmation: 'MCP函数确认',
+      terminalSensitiveWords: '终端敏感词',
       status: '状态',
       configured: '已配置',
       notConfigured: '未配置'

@@ -17,7 +17,19 @@ A powerful OpenAI CLI Coding Agent built with TypeScript
 │   │   │   ├── en.ts
 │   │   │   └── zh.ts
 │   │   └── index.ts
+│   ├── mcp/
+│   │   ├── services/
+│   │   │   ├── file-system.ts
+│   │   │   ├── index.ts
+│   │   │   ├── terminal-service.ts
+│   │   │   └── todos-service.ts
+│   │   ├── api.ts
+│   │   ├── base-service.ts
+│   │   ├── index.ts
+│   │   ├── manager.ts
+│   │   └── types.ts
 │   ├── services/
+│   │   ├── history.ts
 │   │   ├── index.ts
 │   │   ├── language.ts
 │   │   ├── openai.ts
@@ -32,12 +44,15 @@ A powerful OpenAI CLI Coding Agent built with TypeScript
 │   │   │   ├── commands.ts
 │   │   │   ├── files.ts
 │   │   │   ├── help.ts
+│   │   │   ├── history-editor.ts
 │   │   │   ├── index.ts
 │   │   │   ├── init-handler.ts
 │   │   │   ├── input-handler.ts
 │   │   │   ├── menu.ts
 │   │   │   ├── message-handler.ts
-│   │   │   └── responses.ts
+│   │   │   ├── native-input.ts
+│   │   │   ├── responses.ts
+│   │   │   └── stream-renderer.ts
 │   │   ├── pages/
 │   │   │   ├── config.ts
 │   │   │   ├── help.ts
@@ -47,11 +62,11 @@ A powerful OpenAI CLI Coding Agent built with TypeScript
 │   │   └── index.ts
 │   ├── utils/
 │   │   ├── animation.ts
+│   │   ├── file-types.ts
 │   │   ├── index.ts
 │   │   ├── progress.ts
 │   │   ├── string.ts
 │   │   └── token-calculator.ts
-│   ├── api-example.ts
 │   └── index.ts
 ├── CHANGELOG.md
 ├── package.json
@@ -64,67 +79,93 @@ A powerful OpenAI CLI Coding Agent built with TypeScript
 
 **CHANGELOG.md** (Line Count:11): Code file
 
-**package.json** (Line Count:74): Code file
+**package.json** (Line Count:78): Code file
 
-**PUBLISHING.md** (Line Count:186): Code file
+**PUBLISHING.md** (Line Count:189): Code file
 
 **README.md** (Line Count:118): Code file
 
-**src/api-example.ts** (Line Count:119): Code file
+**src/index.ts** (Line Count:50): Code file
 
-**src/index.ts** (Line Count:31): Code file
+**src/locales/index.ts** (Line Count:17): Code file
 
-**src/locales/index.ts** (Line Count:21): Code file
+**src/locales/lang/en.ts** (Line Count:477): Code file
 
-**src/locales/lang/en.ts** (Line Count:313): Code file
+**src/locales/lang/zh.ts** (Line Count:477): Code file
 
-**src/locales/lang/zh.ts** (Line Count:313): Code file
+**src/mcp/api.ts** (Line Count:86): Code file
 
-**src/services/index.ts** (Line Count:7): Code file
+**src/mcp/base-service.ts** (Line Count:62): Code file
+
+**src/mcp/index.ts** (Line Count:107): Code file
+
+**src/mcp/manager.ts** (Line Count:81): Code file
+
+**src/mcp/services/file-system.ts** (Line Count:891): Code file
+
+**src/mcp/services/index.ts** (Line Count:44): Code file
+
+**src/mcp/services/terminal-service.ts** (Line Count:133): Code file
+
+**src/mcp/services/todos-service.ts** (Line Count:216): Code file
+
+**src/mcp/types.ts** (Line Count:125): Code file
+
+**src/services/history.ts** (Line Count:286): Code file
+
+**src/services/index.ts** (Line Count:8): Code file
 
 **src/services/language.ts** (Line Count:120): Code file
 
-**src/services/openai.ts** (Line Count:330): Code file
+**src/services/openai.ts** (Line Count:409): Code file
 
 **src/services/project-init.ts** (Line Count:690): Code file
 
-**src/services/storage.ts** (Line Count:257): Code file
+**src/services/storage.ts** (Line Count:500): Code file
 
-**src/services/system-detector.ts** (Line Count:536): Code file
+**src/services/system-detector.ts** (Line Count:673): Code file
 
-**src/types/language.ts** (Line Count:311): Code file
+**src/types/language.ts** (Line Count:420): Code file
 
 **src/types/project-doc.ts** (Line Count:35): Code file
 
-**src/ui/components/commands.ts** (Line Count:68): Code file
+**src/ui/components/commands.ts** (Line Count:472): Code file
 
 **src/ui/components/files.ts** (Line Count:621): Code file
 
 **src/ui/components/help.ts** (Line Count:48): Code file
 
-**src/ui/components/index.ts** (Line Count:13): Code file
+**src/ui/components/history-editor.ts** (Line Count:446): Code file
+
+**src/ui/components/index.ts** (Line Count:15): Code file
 
 **src/ui/components/init-handler.ts** (Line Count:143): Code file
 
-**src/ui/components/input-handler.ts** (Line Count:278): Code file
+**src/ui/components/input-handler.ts** (Line Count:323): Code file
 
-**src/ui/components/menu.ts** (Line Count:137): Code file
+**src/ui/components/menu.ts** (Line Count:146): Code file
 
-**src/ui/components/message-handler.ts** (Line Count:686): Code file
+**src/ui/components/message-handler.ts** (Line Count:742): Code file
+
+**src/ui/components/native-input.ts** (Line Count:210): Code file
 
 **src/ui/components/responses.ts** (Line Count:26): Code file
 
+**src/ui/components/stream-renderer.ts** (Line Count:332): Code file
+
 **src/ui/index.ts** (Line Count:12): Code file
 
-**src/ui/pages/config.ts** (Line Count:726): Code file
+**src/ui/pages/config.ts** (Line Count:1000): Code file
 
 **src/ui/pages/help.ts** (Line Count:41): Code file
 
-**src/ui/pages/main.ts** (Line Count:678): Code file
+**src/ui/pages/main.ts** (Line Count:727): Code file
 
-**src/ui/screens/welcome.ts** (Line Count:333): Code file
+**src/ui/screens/welcome.ts** (Line Count:334): Code file
 
 **src/utils/animation.ts** (Line Count:146): Code file
+
+**src/utils/file-types.ts** (Line Count:55): Code file
 
 **src/utils/index.ts** (Line Count:6): Code file
 
@@ -132,10 +173,10 @@ A powerful OpenAI CLI Coding Agent built with TypeScript
 
 **src/utils/string.ts** (Line Count:93): Code file
 
-**src/utils/token-calculator.ts** (Line Count:169): Code file
+**src/utils/token-calculator.ts** (Line Count:202): Code file
 
 **tsconfig.json** (Line Count:20): Code file
 
 ---
 
-*This document was automatically generated by OpenAI CLI on 2025/7/11 10:42:29*
+*This document was automatically generated by OpenAI CLI on 2025/7/15 11:23:44*

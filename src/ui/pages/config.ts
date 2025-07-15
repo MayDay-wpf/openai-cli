@@ -88,6 +88,11 @@ export class ConfigPage {
         description: messages.config.menuDescription.maxToolCalls
       },
       {
+        name: messages.config.menuOptions.terminalSensitiveWords,
+        value: 'terminalSensitiveWords',
+        description: messages.config.menuDescription.terminalSensitiveWords
+      },
+      {
         name: messages.config.menuOptions.viewConfig,
         value: 'viewConfig',
         description: messages.config.menuDescription.viewConfig
@@ -151,6 +156,10 @@ export class ConfigPage {
 
       case 'maxToolCalls':
         await this.editMaxToolCalls();
+        break;
+
+      case 'terminalSensitiveWords':
+        await this.editTerminalSensitiveWords();
         break;
 
       case 'viewConfig':
@@ -428,7 +437,7 @@ export class ConfigPage {
 
     try {
       // 获取所有可用的MCP函数（包括内置和外部）
-      await AnimationUtils.showActionAnimation('正在检测和连接MCP服务...', 500);
+      await AnimationUtils.showActionAnimation('Detecting and connecting MCP services...', 500);
 
       // 使用SystemDetector获取所有工具定义
       const { SystemDetector } = await import('../../services/system-detector');
@@ -443,12 +452,12 @@ export class ConfigPage {
 
         if (!allToolDefinitions || allToolDefinitions.length === 0) {
           console.log('  ' + chalk.yellow(messages.config.messages.noMcpFunctionsFound));
-          console.log('  ' + chalk.gray('提示: 请先配置MCP服务器，或检查MCP服务器是否正常运行'));
+          console.log('  ' + chalk.gray('Please configure MCP servers first, or check if MCP servers are running.'));
 
           // 显示检测到的服务器状态
           if (detectionResult.mcpServers && detectionResult.mcpServers.length > 0) {
             console.log();
-            console.log('  ' + chalk.gray('MCP服务器状态:'));
+            console.log('  ' + chalk.gray('MCP server status:'));
             detectionResult.mcpServers.forEach(server => {
               const statusIcon = server.status === 'connected' ? chalk.green('✓') : chalk.red('✗');
               const toolsInfo = server.tools ? ` (${server.tools.length} tools)` : ' (no tools)';
@@ -461,13 +470,13 @@ export class ConfigPage {
           return;
         }
 
-        console.log('  ' + chalk.green(`✓ 检测到 ${allToolDefinitions.length} 个MCP函数`));
+        console.log('  ' + chalk.green(`✓ Found ${allToolDefinitions.length} MCP functions`));
 
         // 显示服务器连接状态
         if (detectionResult.mcpServers && detectionResult.mcpServers.length > 0) {
           const connectedServers = detectionResult.mcpServers.filter(s => s.status === 'connected');
           const totalTools = detectionResult.mcpServers.reduce((sum, s) => sum + (s.tools?.length || 0), 0);
-          console.log('  ' + chalk.gray(`已连接 ${connectedServers.length}/${detectionResult.mcpServers.length} 个服务器，共 ${totalTools} 个工具`));
+          console.log('  ' + chalk.gray(`Connected ${connectedServers.length}/${detectionResult.mcpServers.length} servers, ${totalTools} tools`));
         }
         console.log();
 
@@ -506,6 +515,7 @@ export class ConfigPage {
         const selectedFunctions = await checkbox({
           message: '  ' + messages.config.prompts.mcpFunctionConfirmationPrompt + ':',
           choices: checkboxOptions,
+          pageSize: 10,
           validate: (answer) => {
             // 允许空选择，表示所有函数都不需要确认
             return true;
@@ -539,20 +549,20 @@ export class ConfigPage {
         console.log('  ' + chalk.green('✓ ' + messages.config.messages.mcpFunctionConfirmationSaved));
 
         if (selectedFunctions.length > 0) {
-          console.log('  ' + chalk.gray(`已设置 ${selectedFunctions.length} 个函数需要手动确认:`));
+          console.log('  ' + chalk.gray(`${selectedFunctions.length} functions need to be confirmed manually.`));
           selectedFunctions.forEach(funcName => {
             console.log('    ' + chalk.green('✓ ') + chalk.white(funcName));
           });
         } else {
-          console.log('  ' + chalk.gray('所有MCP函数将自动执行，无需确认'));
+          console.log('  ' + chalk.gray('All MCP functions will execute automatically without confirmation.'));
         }
 
         // 清理SystemDetector资源
         await systemDetector.cleanup();
 
       } catch (mcpError) {
-        console.log('  ' + chalk.yellow(`获取MCP函数列表失败: ${mcpError instanceof Error ? mcpError.message : String(mcpError)}`));
-        console.log('  ' + chalk.gray('请确保MCP服务配置正确并且服务器正在运行'));
+        console.log('  ' + chalk.yellow(`Failed to retrieve MCP function list: ${mcpError instanceof Error ? mcpError.message : String(mcpError)}`));
+        console.log('  ' + chalk.gray('Please ensure that the MCP service is configured correctly and the server is running.'));
         return;
       }
 
@@ -757,6 +767,22 @@ export class ConfigPage {
       confirmedFunctions.length > 0 ? messages.config.labels.configured : messages.config.labels.notConfigured
     );
 
+    const terminalSensitiveWords = config.terminalSensitiveWords || [];
+    let terminalWordsDisplayValue: string | undefined;
+    if (terminalSensitiveWords.length > 0) {
+      if (terminalSensitiveWords.length <= 5) {
+        terminalWordsDisplayValue = terminalSensitiveWords.join(', ');
+      } else {
+        terminalWordsDisplayValue = `${terminalSensitiveWords.slice(0, 5).join(', ')} +${terminalSensitiveWords.length - 5} more`;
+      }
+    }
+
+    this.displayConfigItem(
+      messages.config.labels.terminalSensitiveWords,
+      terminalWordsDisplayValue,
+      terminalSensitiveWords.length > 0 ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
     console.log();
 
     // 显示配置完整性状态
@@ -900,6 +926,52 @@ export class ConfigPage {
     });
   }
 
+  private async editTerminalSensitiveWords(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfig = StorageService.getApiConfig();
+    const currentWords = currentConfig.terminalSensitiveWords || [];
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.terminalSensitiveWords));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.terminalSensitiveWords));
+
+    if (currentWords.length > 0) {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${currentWords.length} words configured`));
+      currentWords.slice(0, 5).forEach(word => {
+        console.log('    ' + chalk.gray(`- ${word}`));
+      });
+      if (currentWords.length > 5) {
+        console.log('    ' + chalk.gray('...'));
+      }
+    } else {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: ${messages.config.labels.notConfigured}`));
+    }
+    console.log();
+    console.log('  ' + chalk.gray(messages.config.messages.terminalSensitiveWordsEditorPrompt));
+
+    try {
+      const wordsString = await editor({
+        message: '  ' + messages.config.prompts.terminalSensitiveWordsInput + ':',
+        default: currentWords.join('\n'),
+        validate: (input: string) => {
+          return true;
+        }
+      });
+
+      this.resetTerminalState();
+
+      if (wordsString !== undefined) {
+        const newWords = wordsString.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+        StorageService.saveTerminalSensitiveWords(newWords);
+        console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+      }
+    } catch (error) {
+      this.resetTerminalState();
+      console.log();
+      return;
+    }
+  }
+
   private async resetConfig(): Promise<void> {
     const messages = languageService.getMessages();
 
@@ -925,6 +997,4 @@ export class ConfigPage {
       console.log('  ' + chalk.gray(messages.config.messages.resetCancelled));
     }
   }
-
-
-} 
+}

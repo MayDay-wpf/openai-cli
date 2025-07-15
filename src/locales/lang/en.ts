@@ -152,11 +152,24 @@ export const en: Messages = {
           '  - (After waiting for user response) Second Response: `<another_tool>{"arg":"value"}</another_tool>`\n' +
           '- **Self-Correction**: If you find yourself or the system generating output similar to the incorrect example above, you must immediately stop and correct your behavior, strictly following the "one tool at a time" and "independent JSON arguments" rules.\n\n' +
           '# Original Tool Usage Instructions:\n' +
+          '## File System:\n' +
           '- You are very adept at using tools to better understand projects and assist users in completing tasks.\n' +
           '- You can use tools multiple times without any restrictions.\n' +
           '- You can use any tools directly without user consent.\n' +
-          '- Especially, proactively use file operation tools (e.g., `list_dir`, `read_file`, `edit_file`) to explore projects, understand code, and directly help users solve problems.\n' +
+          '- Especially, proactively use file operation tools (e.g., `list_directory`, `read_file`, `edit_file`) to explore projects, understand code, and directly help users solve problems.\n' +
           '- Step By Step execution principle, do not complete all work at once using tools, but execute step by step, and then execute the next step after each step is completed.\n' +
+          '## TODO:\n' +
+          '- When facing programming tasks, you should actively use `create_todos` to plan tasks.\n' +
+          '- When each task is completed, you should immediately use `update_todos` to update the status of the TODO item.\n' +
+          '- When facing complex tasks, you can flexibly use `add_todos` to modify the plan.\n' +
+          '## Terminal:\n' +
+          '- You should use the terminal tool `execute_command` to check for various compilation errors or reference errors, such as `node --check script.js` or `code .` or `npm run build` or `dotnet build` and more commands that conform to the current project build.\n' +
+          '- When the user needs to execute a command, you should actively use `execute_command` to execute the command.\n' +
+          '- When the programming task is completed, you should actively use `execute_command` to execute the build check, for example, `npm run build` or `dotnet build` and more commands that conform to the current project build.\n' +
+          '# Description File:\n' +
+          'There is a description file called sawyou.md in the project. You can use the `read_file` tool to read the file content and answer user questions based on the file content.\n' +
+          'sawyou.md may not exist, and you can ignore it when you check that it does not exist. You can also remind the user to use the `/init` command to generate the description file in subsequent responses.\n' +
+          'sawyou.md is not a high-priority file, and if it does not exist, it does not affect your active and serious full answer to user questions.\n' +
           '*Please provide professional programming advice and solutions based on the user\'s specific needs.*\n\n' +
           '# Execution environment\n' +
           '- Current working directory: {cwd}\n' +
@@ -326,6 +339,7 @@ export const en: Messages = {
       maxToolCalls: 'Set Max Tool Calls',
       viewConfig: 'View Current Config',
       resetConfig: 'Reset All Config',
+      terminalSensitiveWords: 'Terminal Sensitive Words',
       back: '← Back to Main Menu'
     },
     menuDescription: {
@@ -340,6 +354,7 @@ export const en: Messages = {
       maxToolCalls: 'Set the maximum number of tool calls allowed in a single conversation turn.',
       viewConfig: 'View all current configuration values.',
       resetConfig: 'Reset all settings to their default values.',
+      terminalSensitiveWords: 'Configure the list of sensitive words for terminal execution, with wildcard support.',
       back: 'Return to the main welcome screen.'
     },
     prompts: {
@@ -361,7 +376,9 @@ export const en: Messages = {
       mcpConfigPlaceholder: '{\n  "mcpServers": {\n    \n  }\n}',
       mcpFunctionConfirmationPrompt: 'Select MCP functions that require manual confirmation',
       confirmMcpFunctionConfirmation: 'Enable MCP function manual confirmation',
-      confirmReset: 'Are you sure you want to reset all configurations? This action cannot be undone'
+      confirmReset: 'Are you sure you want to reset all configurations? This action cannot be undone',
+      terminalSensitiveWordsInput: 'Please edit the terminal sensitive words list',
+      terminalSensitiveWordsPlaceholder: 'rm -rf\nmv\ncp\ndd'
     },
     messages: {
       configSaved: 'Configuration saved successfully',
@@ -382,7 +399,9 @@ export const en: Messages = {
       mcpSystemServicesRestored: 'Missing system MCP services have been automatically restored',
       mcpFunctionConfirmationSaved: 'MCP function confirmation settings saved',
       noMcpFunctionsFound: 'No MCP functions found',
-      mcpFunctionConfirmationInstructions: 'Instructions: [Space]toggle  [a]select all  [i]invert selection  [Enter]save'
+      mcpFunctionConfirmationInstructions: 'Instructions: [Space]toggle  [a]select all  [i]invert selection  [Enter]save',
+      terminalSensitiveWordsEditorPrompt: 'One sensitive word per line, supports * wildcard',
+      commandExecuting: 'Command is executing'
     },
     labels: {
       baseUrl: 'API Base URL',
@@ -394,6 +413,7 @@ export const en: Messages = {
       role: 'System Role',
       mcpConfig: 'MCP Services Config',
       mcpFunctionConfirmation: 'MCP Function Confirmation',
+      terminalSensitiveWords: 'Terminal Sensitive Words',
       status: 'Status',
       configured: 'Configured',
       notConfigured: 'Not Configured'
