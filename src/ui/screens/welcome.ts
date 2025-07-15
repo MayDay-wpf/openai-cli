@@ -77,7 +77,7 @@ export class WelcomeScreen {
     console.log();
 
     // 添加版本信息和徽章
-    const versionBadge = '  [ v0.0.4 ] ';
+    const versionBadge = '  [ v0.1.2 ] ';
     const statusBadge = '  [ BETA ] ';
     const aiBadge = '  [ AI-POWERED ] ';
 

@@ -88,6 +88,7 @@ export interface Messages {
       init: { name: string; description: string };
       exportHistory: { name: string; description: string };
       importHistory: { name: string; description: string };
+      checkpoint: { name: string; description: string };
     };
     messages: {
       configInDevelopment: string;

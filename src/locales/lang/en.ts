@@ -104,6 +104,10 @@ export const en: Messages = {
       importHistory: {
         name: '/import-history',
         description: 'Import chat history'
+      },
+      checkpoint: {
+        name: '/checkpoint',
+        description: 'View history modification checkpoints, restore modifications, and clear checkpoints'
       }
     },
     messages: {
