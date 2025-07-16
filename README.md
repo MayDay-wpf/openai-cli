@@ -9,6 +9,11 @@
   [![Node.js](https://img.shields.io/badge/Node.js-16%2B-green.svg)](https://nodejs.org/)
 </div>
 
+<div>
+  <img src = "zh.png" />
+  <img src = "en.png" />
+</div>
+
 ## ✨ 功能特性
 
 - 🧠 **智能代码生成与优化** - AI 驱动的代码自动生成和优化建议
@@ -110,6 +115,17 @@ npm publish
 - 项目主页: [https://github.com/MayDay-wpf/openai-cli](https://github.com/MayDay-wpf/openai-cli)
 - Bug 报告: [https://github.com/MayDay-wpf/openai-cli/issues](https://github.com/MayDay-wpf/openai-cli/issues)
 
+
+## 🔆功能
+
+- 文件系统操作
+- TODOS
+- 终端操作
+- 第三方MCP兼容
+- 自定义BaseURL、APIKEY
+- OpenAI Completions 请求兼容
+- 历史记录导出
+- 检查点回滚
 ---
 
 <div align="center">

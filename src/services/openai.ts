@@ -79,11 +79,17 @@ class OpenAIService {
       let reasoningContent = '';
 
       for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta;
+        const delta = chunk.choices[0]?.delta as any;
 
         if (delta?.content) {
           accumulatedContent += delta.content;
           options.onChunk(delta.content);
+        }
+
+        const reasoningChunk = delta?.reasoning_content || delta?.reasoning;
+        if (reasoningChunk) {
+          reasoningContent += reasoningChunk;
+          options.onReasoningChunk(reasoningChunk);
         }
 
         if (delta?.tool_calls) {

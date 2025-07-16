@@ -25,7 +25,7 @@ export class AnimationUtils {
    * 显示可控制的加载动画（异步关闭）
    */
   static showLoadingAnimation(options: AnimationOptions): LoadingController {
-    const { text, interval = 200 } = options;
+    const { text, interval = 100 } = options;
 
     // 预计算彩色文字
     const loadingText = this.gradients.primary(text);

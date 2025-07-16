@@ -35,11 +35,13 @@ export class MessageHandler {
     private currentMessages: Messages;
     private callbacks: MessageHandlerCallbacks;
     private streamRenderer: StreamRenderer;
+    private reasoningStreamRenderer: StreamRenderer;
 
     constructor(messages: Messages, callbacks: MessageHandlerCallbacks) {
         this.currentMessages = messages;
         this.callbacks = callbacks;
         this.streamRenderer = new StreamRenderer();
+        this.reasoningStreamRenderer = new StreamRenderer();
 
         // 监听语言变更事件
         languageService.onLanguageChange((language) => {
@@ -280,9 +282,12 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                 const chatMessages = await this.buildChatMessages();
 
                 let isFirstChunk = true;
+                let isFirstReasoningChunk = true;
                 const resetForNewResponse = () => {
                     isFirstChunk = true;
+                    isFirstReasoningChunk = true;
                     this.streamRenderer.reset();
+                    this.reasoningStreamRenderer.reset();
                 };
 
                 resetForNewResponse();
@@ -293,7 +298,24 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                 const result = await openAIService.streamChat({
                     messages: chatMessages,
                     tools: tools.length > 0 ? tools : undefined,
-                    onReasoningChunk: (chunk: string) => { },
+                    onReasoningChunk: (chunk: string) => {
+                        stopLoading();
+                        if (isFirstReasoningChunk) {
+                            const timeStr = new Date().toLocaleTimeString(messages.main.messages.format.timeLocale, {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                            const thinkingColor = chalk.hex('#6B7280');
+                            const thinkingPrefix = chalk.bgHex('#6B7280').white.bold(` Thinking `) + thinkingColor(` ${timeStr} `);
+                            process.stdout.write(thinkingPrefix + '\n');
+                            isFirstReasoningChunk = false;
+                        }
+                        const formattedChunk = this.reasoningStreamRenderer.processChunk(chunk);
+                        if (formattedChunk) {
+                            process.stdout.write(chalk.gray(formattedChunk));
+                        }
+                        startLoading();
+                    },
                     onToolChunk: (toolChunk) => { },
                     onAssistantMessage: ({ content, toolCalls }) => {
                         stopLoading();
@@ -302,6 +324,11 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                         if (finalContent) {
                             process.stdout.write(finalContent);
                         }
+                        const finalReasoningContent = this.reasoningStreamRenderer.finalize();
+                        if (finalReasoningContent) {
+                            process.stdout.write(chalk.gray(finalReasoningContent));
+                        }
+                        this.reasoningStreamRenderer.reset();
 
                         const aiMessage: Message = {
                             type: 'ai',
@@ -339,8 +366,15 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                         if (finalContent) {
                             process.stdout.write(finalContent);
                         }
+                        const finalReasoningContent = this.reasoningStreamRenderer.finalize();
+                        if (finalReasoningContent) {
+                            process.stdout.write(chalk.gray(finalReasoningContent));
+                        }
+                        this.reasoningStreamRenderer.reset();
 
                         if (finalContent || fullResponse) {
+                            process.stdout.write('\n\n');
+                        } else if (!isFirstReasoningChunk) {
                             process.stdout.write('\n\n');
                         }
 
@@ -356,6 +390,10 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                     },
                     onError: (error: Error) => {
                         stopLoading();
+                        const finalReasoningContent = this.reasoningStreamRenderer.finalize();
+                        if (finalReasoningContent) {
+                            process.stdout.write(chalk.gray(finalReasoningContent) + '\n\n');
+                        }
                         const errorMsg = `${messages.main.status.connectionError}: ${error.message}`;
                         process.stdout.write(chalk.red(errorMsg) + '\n\n');
                         console.log(chalk.gray(JSON.stringify(chatMessages, null, 2)));
