@@ -49,6 +49,25 @@ export const en: Messages = {
         version: 'openai-cli --version          # Show version information',
         help: 'openai-cli --help             # Display help information'
       }
+    },
+    updateCheck: {
+      newVersionAvailable: '🎉 New Version Available!',
+      currentVersion: 'Current Version',
+      latestVersion: 'Latest Version',
+      updateCommand: 'Update Command:',
+      updatePrompt: 'Would you like to update now?',
+      updateNow: 'Update Now',
+      skipUpdate: 'Skip Update',
+      updateDescription: 'Download and install the latest version',
+      skipDescription: 'Update manually later',
+      updating: 'Updating...',
+      manualUpdate: 'Please run the following command to update manually:',
+      updateInstructions: 'Please restart the application after the update',
+      updateFailed: 'Update failed, please update manually',
+      updateSuccess: '✅ Update Successful!',
+      restartRequired: '⚠️ Restart Required',
+      restartInstructions: 'Please restart your terminal or re-run the openai-cli command to use the new version',
+      errorDetails: 'Error Details'
     }
   },
   main: {

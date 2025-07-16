@@ -49,6 +49,25 @@ export const zh: Messages = {
         version: 'openai-cli --version          # 查看版本信息',
         help: 'openai-cli --help             # 显示帮助信息'
       }
+    },
+    updateCheck: {
+      newVersionAvailable: '🎉 发现新版本！',
+      currentVersion: '当前版本',
+      latestVersion: '最新版本',
+      updateCommand: '更新命令：',
+      updatePrompt: '是否立即更新？',
+      updateNow: '立即更新',
+      skipUpdate: '跳过更新',
+      updateDescription: '下载并安装最新版本',
+      skipDescription: '稍后手动更新',
+      updating: '正在更新...',
+      manualUpdate: '请手动运行以下命令进行更新：',
+      updateInstructions: '更新完成后请重新启动应用程序',
+      updateFailed: '更新失败，请手动更新',
+      updateSuccess: '✅ 更新成功！',
+      restartRequired: '⚠️ 需要重启',
+      restartInstructions: '请重新启动终端或重新运行 openai-cli 命令以使用新版本',
+      errorDetails: '错误详情'
     }
   },
   main: {

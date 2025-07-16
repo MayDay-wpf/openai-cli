@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import figlet from 'figlet';
 import { languageService } from '../../services/language';
 import { StorageService } from '../../services/storage';
+import { updateChecker } from '../../services/update-checker';
 import { Language } from '../../types/language';
 import { AnimationUtils } from '../../utils/animation';
 import { InteractiveMenu, MenuChoice } from '../components/menu';
@@ -15,10 +16,38 @@ export class WelcomeScreen {
 
   async show(): Promise<void> {
     await this.showSplashScreen();
+
+    // 在显示主菜单前进行更新检查
+    await this.checkForUpdates();
+
     await this.showMainMenu();
   }
 
+  /**
+   * 检查更新并提示用户
+   */
+  private async checkForUpdates(): Promise<void> {
+    try {
+      const updateInfo = await updateChecker.checkForUpdates();
 
+      if (updateInfo.hasUpdate) {
+        const shouldUpdate = await updateChecker.showUpdatePrompt(updateInfo);
+
+        if (shouldUpdate) {
+          await updateChecker.performUpdate();
+
+          // 显示按键继续提示
+          const messages = languageService.getMessages();
+          await input({
+            message: '  ' + chalk.gray(messages.welcome.actions.pressEnter)
+          });
+        }
+      }
+    } catch (error) {
+      // 静默处理更新检查错误，不影响正常启动
+      console.debug('Update check failed:', error);
+    }
+  }
 
   private async showSplashScreen(): Promise<void> {
     // 隐藏光标减少闪烁

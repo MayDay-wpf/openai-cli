@@ -60,6 +60,25 @@ export interface Messages {
         help: string;
       };
     };
+    updateCheck: {
+      newVersionAvailable: string;
+      currentVersion: string;
+      latestVersion: string;
+      updateCommand: string;
+      updatePrompt: string;
+      updateNow: string;
+      skipUpdate: string;
+      updateDescription: string;
+      skipDescription: string;
+      updating: string;
+      manualUpdate: string;
+      updateInstructions: string;
+      updateFailed: string;
+      updateSuccess: string;
+      restartRequired: string;
+      restartInstructions: string;
+      errorDetails: string;
+    };
   };
   main: {
     title: string;
