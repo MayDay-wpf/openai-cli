@@ -3,8 +3,9 @@ import { highlight } from 'cli-highlight';
 import { createPatch } from 'diff';
 import * as fs from 'fs';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { TodosService } from '../../mcp/services';
-import { languageService } from '../../services/language';
+import { CheckpointService, languageService } from '../../services';
 import { ChatMessage, openAIService } from '../../services/openai';
 import { StorageService } from '../../services/storage';
 import { SystemDetector } from '../../services/system-detector';
@@ -228,6 +229,13 @@ If it has been completed, remember to call the 'update_todos' tool to update the
         const lastMessage = allCurrentMessages.length > 0 ? allCurrentMessages[allCurrentMessages.length - 1] : null;
         if (lastMessage && lastMessage.type === 'user' && !isContinuation) {
             TodosService.clearTodos();
+
+            // 为这项新任务设置一个检查点任务
+            const taskId = uuidv4();
+            const taskDescription = typeof lastMessage.content === 'string'
+                ? (lastMessage.content as string).substring(0, 100)
+                : 'Task from non-string message';
+            CheckpointService.getInstance().setCurrentTask(taskId, taskDescription);
         }
 
         const messages = languageService.getMessages();
@@ -270,7 +278,7 @@ If it has been completed, remember to call the 'update_todos' tool to update the
 
             while (continueConversation) {
                 const chatMessages = await this.buildChatMessages();
-                
+
                 let isFirstChunk = true;
                 const resetForNewResponse = () => {
                     isFirstChunk = true;
@@ -285,8 +293,8 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                 const result = await openAIService.streamChat({
                     messages: chatMessages,
                     tools: tools.length > 0 ? tools : undefined,
-                    onReasoningChunk: (chunk: string) => {},
-                    onToolChunk: (toolChunk) => {},
+                    onReasoningChunk: (chunk: string) => { },
+                    onToolChunk: (toolChunk) => { },
                     onAssistantMessage: ({ content, toolCalls }) => {
                         stopLoading();
 
@@ -335,7 +343,7 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                         if (finalContent || fullResponse) {
                             process.stdout.write('\n\n');
                         }
-                        
+
                         if (fullResponse) {
                             const aiMessage: Message = {
                                 type: 'ai',
@@ -371,6 +379,8 @@ If it has been completed, remember to call the 'update_todos' tool to update the
             const errorMsg = error instanceof Error ? error.message : messages.main.status.unknownError;
             process.stdout.write(chalk.red(`${messages.main.status.connectionError}: ${errorMsg}`) + '\n\n');
         } finally {
+            // 清除当前任务ID，为下一次请求做准备
+            CheckpointService.getInstance().clearCurrentTask();
             this.callbacks.onStateChange({ isProcessing: false, canSendMessage: true });
         }
     }
@@ -399,7 +409,7 @@ If it has been completed, remember to call the 'update_todos' tool to update the
             const parameters = JSON.parse(toolCall.function.arguments || '{}');
 
             console.log(chalk.yellow.bold(`${messages.main.messages.toolCall.calling.replace('{name}', functionName)}`));
-            
+
             const needsConfirmation = StorageService.isFunctionConfirmationRequired(functionName);
 
             if (needsConfirmation) {
@@ -612,16 +622,16 @@ If it has been completed, remember to call the 'update_todos' tool to update the
     private async buildChatMessages(): Promise<ChatMessage[]> {
         const langMessages = languageService.getMessages();
         const selectedTextFiles = this.callbacks.getSelectedTextFiles();
-        
+
         // 1. Get the complete message history ONCE.
         const allMessages = this.callbacks.getRecentMessages();
 
         // 2. Build the static part of the system message.
         const baseSystemMessage = this.buildSystemMessage(langMessages, selectedTextFiles, allMessages);
-        
+
         // 3. Append the dynamic TODO part to the system message
         const todoPromptPart = this.buildTodoPromptPart(allMessages);
-        
+
         // 4. Use TokenCalculator to intelligently select and compress the history.
         // This is now an async call.
         const tokenResult = await TokenCalculator.selectHistoryMessages(
@@ -629,7 +639,7 @@ If it has been completed, remember to call the 'update_todos' tool to update the
             `${baseSystemMessage}\n\n${todoPromptPart}`,
             0.7 // Use 70% of context to leave room for tool calls
         );
-        
+
         const summaryPromptPart = tokenResult.summary ? `\n\n[Prior conversation summary: ${tokenResult.summary}]` : '';
         const systemMessageContent = `${baseSystemMessage}\n\n${todoPromptPart}${summaryPromptPart}`;
 

@@ -1,10 +1,11 @@
 import chalk from 'chalk';
+import * as path from 'path';
+import { Checkpoint, CheckpointService } from '../../services/checkpoint';
 import { HistoryService } from '../../services/history';
 import { languageService } from '../../services/language';
 import { Messages } from '../../types/language';
 import { Message, TokenCalculator } from '../../utils/token-calculator';
 import { HistoryEditor, HistoryEditorResult } from './history-editor';
-import { StreamRenderer } from './stream-renderer';
 
 export interface Command {
     value: string;
@@ -77,6 +78,11 @@ export class CommandManager {
                 value: '/import-history',
                 name: mainCommands.importHistory.name,
                 description: mainCommands.importHistory.description
+            },
+            {
+                value: '/checkpoint',
+                name: mainCommands.checkpoint.name,
+                description: mainCommands.checkpoint.description
             }
         ];
     }
@@ -205,6 +211,10 @@ export class CommandManager {
 
     // 处理标准命令
     private async handleStandardCommand(userInput: string, currentMessages: Message[]): Promise<CommandExecutionResult> {
+        if (userInput.startsWith('/checkpoint')) {
+            return await this.handleCheckpointCommand();
+        }
+
         switch (userInput) {
             case '/export-history':
                 return await this.handleExportHistory(currentMessages);
@@ -227,6 +237,139 @@ export class CommandManager {
             default:
                 return { handled: false };
         }
+    }
+
+    // 处理检查点命令
+    private async handleCheckpointCommand(): Promise<CommandExecutionResult> {
+        const checkpointService = CheckpointService.getInstance();
+        const tasks = checkpointService.getCheckpointsByTask();
+
+        if (tasks.size === 0) {
+            console.log(chalk.yellow('No checkpoints found.'));
+            return { handled: true, shouldContinue: true };
+        }
+
+        const taskChoices = Array.from(tasks.entries())
+            .sort((a, b) => {
+                const timeA = new Date(a[1][0]?.timestamp || 0).getTime();
+                const timeB = new Date(b[1][0]?.timestamp || 0).getTime();
+                return timeB - timeA;
+            })
+            .map(([taskId, checkpoints]) => ({
+                id: taskId,
+                name: this.formatTaskName(checkpoints),
+                checkpoints: checkpoints,
+            }));
+
+        const specialChoices = [
+            { id: 'clear_all', name: '🧹 Clear All Checkpoints' },
+            { id: 'close', name: '❌ Close Menu' },
+        ];
+
+        const allChoices = [...taskChoices, ...specialChoices];
+        let currentIndex = 0;
+        let isRunning = true;
+        let isFirstRender = true;
+
+        const header = () => {
+            console.log(chalk.bold.cyan('=== Checkpoint Manager ==='));
+            console.log(chalk.gray('Use UP/DOWN arrows to navigate, ENTER to select, Q to quit.'));
+            console.log(chalk.gray('─'.repeat(80)));
+            console.log();
+        };
+
+        const renderMenu = () => {
+            if (!isFirstRender) {
+                process.stdout.write('\x1B[?25l');
+                const linesToMove = allChoices.length;
+                process.stdout.write(`\x1B[${linesToMove}A`);
+                process.stdout.write('\x1B[0J');
+            }
+
+            allChoices.forEach((choice, index) => {
+                const isSelected = index === currentIndex;
+                const indicator = isSelected ? chalk.cyan('●') : chalk.gray('○');
+                const name = isSelected ? chalk.white.bold(choice.name) : chalk.gray(choice.name);
+                console.log(`  ${indicator} ${name}`);
+            });
+
+            process.stdout.write('\x1B[?25h');
+            isFirstRender = false;
+        };
+
+        return new Promise((resolve) => {
+            const cleanup = () => {
+                isRunning = false;
+                process.stdin.removeAllListeners('data');
+                if (process.stdin.isTTY) {
+                    process.stdin.setRawMode(false);
+                }
+                process.stdin.pause();
+                process.stdout.write('\x1B[?25h'); // Show cursor
+
+                // Clear only the menu UI instead of the whole console
+                const headerHeight = 4;
+                const menuHeight = allChoices.length;
+                const totalHeight = headerHeight + menuHeight;
+
+                // Move cursor up to the start of the header
+                process.stdout.write(`\x1B[${totalHeight}A`);
+                // Clear from cursor to the end of the screen
+                process.stdout.write(`\x1B[0J`);
+            };
+
+            const keyHandler = async (key: string) => {
+                if (!isRunning) return;
+
+                if (key === '\x1B[A') { // Up
+                    currentIndex = (currentIndex - 1 + allChoices.length) % allChoices.length;
+                    renderMenu();
+                } else if (key === '\x1B[B') { // Down
+                    currentIndex = (currentIndex + 1) % allChoices.length;
+                    renderMenu();
+                } else if (key === '\r' || key === '\n') { // Enter
+                    const selection = allChoices[currentIndex].id;
+                    cleanup();
+
+                    if (selection === 'close') {
+                        // Just exit
+                    } else if (selection === 'clear_all') {
+                        await checkpointService.clearAllCheckpoints();
+                        console.log(chalk.green('\n✅ All checkpoints have been cleared.'));
+                    } else {
+                        const success = await checkpointService.restoreByTask(selection);
+                        if (success) {
+                            console.log(chalk.green(`\n✅ Task ${selection} restored successfully.`));
+                            console.log(chalk.yellow('It is recommended to restart the application to reload file states.'));
+                        } else {
+                            console.log(chalk.red(`\n❌ Failed to restore task ${selection}. Check logs for details.`));
+                        }
+                    }
+                    resolve({ handled: true, shouldContinue: true });
+                } else if (key === 'q' || key === '\x1b' || key.charCodeAt(0) === 3) { // q, esc, ctrl+c
+                    cleanup();
+                    resolve({ handled: true, shouldContinue: true });
+                }
+            };
+
+            if (process.stdin.isTTY) {
+                process.stdin.setRawMode(true);
+            }
+            process.stdin.resume();
+            process.stdin.setEncoding('utf8');
+            process.stdin.on('data', keyHandler);
+
+            header();
+            renderMenu();
+        });
+    }
+
+    private formatTaskName(checkpoints: Checkpoint[]): string {
+        if (!checkpoints || checkpoints.length === 0) return "Invalid Task";
+        const first = checkpoints[0];
+        const time = new Date(first.timestamp).toLocaleString();
+        const fileList = checkpoints.map(c => path.basename(c.originalPath)).join(', ');
+        return `${chalk.cyan(time)} - ${first.description.substring(0, 50)}... (${chalk.yellow(checkpoints.length)} files: ${fileList.substring(0, 40)}...)`;
     }
 
     // 处理导出历史记录
@@ -439,17 +582,17 @@ export class CommandManager {
                 }
                 console.log(`${chalk.cyan(time)} [${role}] - ${content}`);
             });
-            
+
             // 显示Token使用统计
             const stats = await TokenCalculator.getContextUsageStats(messages, '', 0.8);
             const statsMessage = historyMessages.main.messages.tokenUsage.tokenStats
                 .replace('{used}', stats.used.toString())
                 .replace('{max}', stats.maxAllowed.toString())
                 .replace('{percentage}', stats.percentage.toString());
-            
+
             console.log(chalk.bold.yellow(`\n--- Token Usage ---`));
             console.log(statsMessage);
-             if (stats.isNearLimit) {
+            if (stats.isNearLimit) {
                 console.log(chalk.yellow(historyMessages.main.messages.tokenUsage.nearLimit));
             }
         }

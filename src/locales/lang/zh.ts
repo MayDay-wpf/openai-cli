@@ -104,6 +104,10 @@ export const zh: Messages = {
       importHistory: {
         name: '/import-history',
         description: '导入聊天历史记录'
+      },
+      checkpoint: {
+        name: '/checkpoint',
+        description: '查看历史修改检查点, 恢复修改, 清除检查点'
       }
     },
     messages: {

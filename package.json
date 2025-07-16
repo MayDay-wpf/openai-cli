@@ -1,6 +1,6 @@
 {
   "name": "openai-cli-unofficial",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A powerful OpenAI CLI Coding Agent built with TypeScript",
   "main": "dist/index.js",
   "bin": {
@@ -49,7 +49,6 @@
   "preferGlobal": true,
   "dependencies": {
     "@inquirer/prompts": "^7.6.0",
-    "@types/uuid": "^10.0.0",
     "boxen": "^8.0.1",
     "chalk": "^4.1.2",
     "cli-highlight": "^2.1.11",
@@ -57,6 +56,7 @@
     "diff": "^5.2.0",
     "figlet": "^1.7.0",
     "highlight.js": "^11.11.1",
+    "inquirer": "^12.7.0",
     "marked": "^12.0.2",
     "mcp-client": "^1.13.0",
     "openai": "^4.62.1",
@@ -69,6 +69,7 @@
     "@types/inquirer": "^9.0.8",
     "@types/marked": "^5.0.2",
     "@types/node": "^20.19.4",
+    "@types/uuid": "^10.0.0",
     "cross-env": "^7.0.3",
     "rimraf": "^5.0.5",
     "ts-node": "^10.9.1",

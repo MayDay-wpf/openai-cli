@@ -2,6 +2,7 @@ import { highlight } from 'cli-highlight';
 import { createPatch } from 'diff';
 import * as fs from 'fs';
 import * as path from 'path';
+import { CheckpointService } from '../../services/checkpoint';
 import { StorageService } from '../../services/storage';
 import { getLanguageForFile } from '../../utils/file-types';
 import { BaseMCPService } from '../base-service';
@@ -517,6 +518,8 @@ export class FileSystemService extends BaseMCPService {
         const encoding = params.encoding || 'utf8';
 
         try {
+            // 在文件操作之前创建检查点
+            await CheckpointService.getInstance().createCheckpoint(params.path);
             const targetPath = path.resolve(params.path);
             const parentDir = path.dirname(targetPath);
 
@@ -562,6 +565,12 @@ export class FileSystemService extends BaseMCPService {
 
         try {
             const targetPath = path.resolve(params.path);
+            const protectedPath = path.resolve(process.cwd(), '.openai-cli');
+
+            // Prevent deletion of the .openai-cli directory and its contents
+            if (targetPath.startsWith(protectedPath)) {
+                return this.createSuccessResponse(request.id, `❌ **Error: Protected Path**\n\nThe path "${params.path}" is within the protected '.openai-cli' directory and cannot be deleted.`);
+            }
 
             // Check if path exists
             if (!fs.existsSync(targetPath)) {
@@ -597,6 +606,7 @@ export class FileSystemService extends BaseMCPService {
 
             } else {
                 // Handle file deletion
+                await CheckpointService.getInstance().createCheckpoint(targetPath);
                 const fileSize = stats.size;
                 fs.unlinkSync(targetPath);
 
@@ -673,6 +683,9 @@ export class FileSystemService extends BaseMCPService {
 
         try {
             const targetPath = path.resolve(params.path);
+
+            // 在文件操作之前创建检查点
+            await CheckpointService.getInstance().createCheckpoint(params.path);
 
             // Check if file exists
             if (!fs.existsSync(targetPath)) {
