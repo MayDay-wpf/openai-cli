@@ -54,20 +54,6 @@ jobs:
           ```bash
           npm install -g openai-cli-unofficial@${{ steps.tag.outputs.tag }}
           ```
-          
-          ## 📝 更新内容
-          查看 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) 了解详情
-          
-          ## 📊 包信息
-          - 📦 包大小: ~14KB
-          - 🔗 npm 页面: https://www.npmjs.com/package/openai-cli-unofficial
-          
-          ## ✨ 主要功能
-          - 🧠 智能代码生成与优化
-          - 🔧 自动化代码重构  
-          - 📚 智能文档生成
-          - 🐛 错误诊断与修复
-          - 🌍 多语言支持（中文/英文）
         draft: false
         prerelease: false
       env:
