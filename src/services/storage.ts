@@ -15,6 +15,9 @@ export interface ApiConfig {
   terminalSensitiveWords?: string[];
 }
 
+// 配置变更监听器类型
+export type ConfigChangeListener = (config: ApiConfig) => void;
+
 export interface McpFunctionConfirmationConfig {
   [functionName: string]: boolean; // true表示需要确认，false表示自动执行
 }
@@ -38,6 +41,38 @@ export interface McpConfig {
 export class StorageService {
   private static readonly CONFIG_DIR = path.join(os.homedir(), '.openai-cli');
   private static readonly CONFIG_FILE = path.join(StorageService.CONFIG_DIR, 'config.json');
+  private static configChangeListeners: ConfigChangeListener[] = [];
+
+  /**
+   * 添加配置变更监听器
+   */
+  static onConfigChange(listener: ConfigChangeListener): void {
+    StorageService.configChangeListeners.push(listener);
+  }
+
+  /**
+   * 移除配置变更监听器
+   */
+  static removeConfigChangeListener(listener: ConfigChangeListener): void {
+    const index = StorageService.configChangeListeners.indexOf(listener);
+    if (index > -1) {
+      StorageService.configChangeListeners.splice(index, 1);
+    }
+  }
+
+  /**
+   * 通知所有监听器配置已变更
+   */
+  private static notifyConfigChange(): void {
+    const apiConfig = StorageService.getApiConfig();
+    StorageService.configChangeListeners.forEach(listener => {
+      try {
+        listener(apiConfig);
+      } catch (error) {
+        console.warn('配置变更监听器执行失败:', error);
+      }
+    });
+  }
 
   /**
    * 确保配置目录存在
@@ -166,6 +201,7 @@ export class StorageService {
     const config = StorageService.readConfig();
     config.baseUrl = baseUrl;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
@@ -175,24 +211,27 @@ export class StorageService {
     const config = StorageService.readConfig();
     config.apiKey = apiKey;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
-   * 保存默认模型
+   * 保存模型
    */
   static saveModel(model: string): void {
     const config = StorageService.readConfig();
     config.model = model;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
-   * 保存上下文Token数量
+   * 保存上下文token数量
    */
   static saveContextTokens(contextTokens: number): void {
     const config = StorageService.readConfig();
     config.contextTokens = contextTokens;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
@@ -202,6 +241,7 @@ export class StorageService {
     const config = StorageService.readConfig();
     config.maxConcurrency = maxConcurrency;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
@@ -211,15 +251,17 @@ export class StorageService {
     const config = StorageService.readConfig();
     config.maxToolCalls = maxToolCalls;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
-   * 保存系统角色
+   * 保存角色
    */
   static saveRole(role: string): void {
     const config = StorageService.readConfig();
     config.role = role;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
@@ -229,6 +271,7 @@ export class StorageService {
     const config = StorageService.readConfig();
     config.terminalSensitiveWords = words;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
@@ -323,6 +366,7 @@ export class StorageService {
     if (apiConfig.maxToolCalls !== undefined) config.maxToolCalls = apiConfig.maxToolCalls;
     if (apiConfig.role !== undefined) config.role = apiConfig.role;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**
@@ -359,6 +403,7 @@ export class StorageService {
     // 保留语言设置
     // delete config.language;
     StorageService.writeConfig(config);
+    StorageService.notifyConfigChange();
   }
 
   /**

@@ -29,6 +29,11 @@ class OpenAIService {
   constructor() {
     this.openai = null; // Initialize to null
     this.updateConfig();
+
+    // 监听配置变更事件
+    StorageService.onConfigChange(() => {
+      this.updateConfig();
+    });
   }
 
   public updateConfig() {

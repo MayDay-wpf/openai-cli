@@ -1,10 +1,10 @@
 import boxen from 'boxen';
 import chalk from 'chalk';
 import { MCPClient } from 'mcp-client';
+import { GlobalMCPManager } from '../mcp/manager';
 import { AnimationUtils } from '../utils';
 import { languageService } from './language';
 import { StorageService } from './storage';
-import { GlobalMCPManager } from '../mcp/manager';
 
 export interface McpServerInfo {
     name: string;
@@ -150,13 +150,13 @@ export class SystemDetector {
             const statusColor = this.getStatusColor(server.status);
 
             content += `${statusIcon} ${chalk.white.bold(server.name)}\n`;
-            
+
             // 显示服务类型，内置服务特殊处理
             if (server.isBuiltIn) {
                 content += `   ${chalk.gray('Type:')} ${chalk.green('BUILTIN')} ${chalk.gray(`(${messages.builtinServices.protected})`)}`;
             } else {
                 content += `   ${chalk.gray('Type:')} ${chalk.white(server.type.toUpperCase())}`;
-                
+
                 // 如果实际传输方式与配置不同，显示回退信息
                 if (server.actualTransport && server.actualTransport !== server.type) {
                     content += chalk.gray(` → ${server.actualTransport.toUpperCase()}`);
@@ -221,7 +221,7 @@ export class SystemDetector {
             if (config.transport === 'builtin') {
                 serverInfo.isBuiltIn = true;
                 serverInfo.actualTransport = 'builtin';
-                
+
                 // 直接连接内置服务
                 try {
                     await this.connectToBuiltInServer(serverInfo);
@@ -265,7 +265,7 @@ export class SystemDetector {
             // 验证内置服务存在
             const servicesInfo = this.globalMCPManager.getServicesInfo();
             const serviceExists = servicesInfo.some(service => service.serviceName === serverInfo.name);
-            
+
             if (!serviceExists) {
                 throw new Error(`Built-in service '${serverInfo.name}' not found`);
             }
@@ -502,11 +502,11 @@ export class SystemDetector {
         try {
             if (this.globalMCPManager.isReady()) {
                 const servicesInfo = this.globalMCPManager.getServicesInfo();
-                
+
                 for (const serviceInfo of servicesInfo) {
                     try {
                         const tools = this.globalMCPManager.getServiceTools(serviceInfo.serviceName);
-                        
+
                         // 将内置服务的工具转换为OpenAI格式
                         for (const tool of tools) {
                             const openAITool = this.convertMcpToolToOpenAI(tool, serviceInfo.serviceName);
@@ -527,7 +527,7 @@ export class SystemDetector {
                     for (const serviceInfo of servicesInfo) {
                         try {
                             const tools = this.globalMCPManager.getServiceTools(serviceInfo.serviceName);
-                            
+
                             // 将内置服务的工具转换为OpenAI格式
                             for (const tool of tools) {
                                 const openAITool = this.convertMcpToolToOpenAI(tool, serviceInfo.serviceName);
@@ -626,13 +626,13 @@ export class SystemDetector {
                     method: actualToolName,
                     params: parameters
                 };
-                
+
                 const response = await this.globalMCPManager.handleRequest(serverName, request);
-                
+
                 if (response.error) {
                     throw new Error(response.error.message);
                 }
-                
+
                 return response.result;
             } catch (error) {
                 throw new Error(`Failed to execute built-in MCP tool ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`);

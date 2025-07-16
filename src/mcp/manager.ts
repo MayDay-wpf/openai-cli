@@ -33,7 +33,7 @@ export class GlobalMCPManager {
       // 获取所有服务信息并验证它们能正常工作
       const servicesInfo = this.serviceManager.getServicesInfo();
       // 静默初始化，不输出详细信息到控制台
-      
+
       this.isInitialized = true;
     } catch (error) {
       console.error('初始化MCP服务失败:', error);

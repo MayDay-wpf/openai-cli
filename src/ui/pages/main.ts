@@ -15,6 +15,7 @@ export class MainPage {
   };
   private loadingController: LoadingController | null = null;
   private isDestroyed = false;
+  private configChangeListener: ((config: any) => void) | null = null;
 
   // 组件管理器
   private commandManager: CommandManager;
@@ -78,12 +79,27 @@ export class MainPage {
     languageService.onLanguageChange((language) => {
       this.updateLanguage();
     });
+
+    // 监听配置变更
+    this.configChangeListener = () => {
+      // 在非聊天状态下刷新欢迎框显示
+      if (this.chatState.canSendMessage && !this.chatState.isProcessing) {
+        this.refreshWelcomeBox();
+      }
+    };
+    StorageService.onConfigChange(this.configChangeListener);
   }
 
   // 销毁方法，清理所有资源
   destroy(): void {
     if (this.isDestroyed) return;
     this.isDestroyed = true;
+
+    // 移除配置变更监听器
+    if (this.configChangeListener) {
+      StorageService.removeConfigChangeListener(this.configChangeListener);
+      this.configChangeListener = null;
+    }
 
     // 停止loading动画
     if (this.loadingController) {
@@ -181,6 +197,67 @@ export class MainPage {
     await this.show();
   }
 
+  /**
+   * 刷新欢迎框显示（配置变更时调用）
+   */
+  private refreshWelcomeBox(): void {
+    if (this.isDestroyed || this.chatState.isProcessing) return;
+
+    // 先清除屏幕上方的欢迎框区域（保留聊天历史）
+    // 移动到顶部并清除前几行
+    process.stdout.write('\x1B[H'); // 移动到屏幕顶部
+
+    // 清除前15行（大致是欢迎框的高度）
+    for (let i = 0; i < 15; i++) {
+      process.stdout.write('\x1B[2K'); // 清除整行
+      if (i < 14) {
+        process.stdout.write('\x1B[1B'); // 下移一行
+      }
+    }
+
+    // 返回到顶部重新显示欢迎框
+    process.stdout.write('\x1B[H');
+    this.showWelcomeBox();
+
+    // 移动到最底部（继续输入位置）
+    process.stdout.write('\x1B[999B');
+  }
+
+  /**
+   * 显示欢迎框
+   */
+  private showWelcomeBox(): void {
+    const main = this.currentMessages.main;
+
+    // 获取当前配置信息
+    const currentDir = process.cwd();
+    const apiConfig = StorageService.getApiConfig();
+
+    // 构建配置信息显示文本
+    const configInfo = main.welcomeBox.configInfo
+      .replace('{currentDir}', currentDir)
+      .replace('{baseUrl}', apiConfig.baseUrl || 'unknown')
+      .replace('{apiKey}', apiConfig.apiKey ? StringUtils.maskApiKey(apiConfig.apiKey) : 'unknown');
+
+    // 欢迎方框
+    const welcomeBox = boxen(
+      chalk.hex('#FF6B6B').bold(main.title + '\n\n') +
+      chalk.hex('#4ECDC4').italic(main.subtitle) + '\n\n' +
+      chalk.hex('#45B7D1')('─'.repeat(50)) + '\n' +
+      configInfo,
+      {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'double',
+        borderColor: 'magenta',
+        title: main.welcomeBox.title,
+        titleAlignment: 'center'
+      }
+    );
+
+    process.stdout.write(welcomeBox + '\n\n');
+  }
+
   async show(): Promise<void> {
     // 确保之前的状态已清理
     if (this.isDestroyed) {
@@ -212,35 +289,8 @@ export class MainPage {
       // 忽略清理错误
     }
 
-    const main = this.currentMessages.main;
-
-    // 获取当前配置信息
-    const currentDir = process.cwd();
-    const apiConfig = StorageService.getApiConfig();
-
-    // 构建配置信息显示文本
-    const configInfo = main.welcomeBox.configInfo
-      .replace('{currentDir}', currentDir)
-      .replace('{baseUrl}', apiConfig.baseUrl || 'unknown')
-      .replace('{apiKey}', apiConfig.apiKey ? StringUtils.maskApiKey(apiConfig.apiKey) : 'unknown');
-
-    // 欢迎方框
-    const welcomeBox = boxen(
-      chalk.hex('#FF6B6B').bold(main.title + '\n\n') +
-      chalk.hex('#4ECDC4').italic(main.subtitle) + '\n\n' +
-      chalk.hex('#45B7D1')('─'.repeat(50)) + '\n' +
-      configInfo,
-      {
-        padding: 1,
-        margin: 1,
-        borderStyle: 'double',
-        borderColor: 'magenta',
-        title: main.welcomeBox.title,
-        titleAlignment: 'center'
-      }
-    );
-
-    process.stdout.write(welcomeBox + '\n\n');
+    // 显示欢迎框
+    this.showWelcomeBox();
 
     // 在显示输入之前先进行系统检测
     await this.performSystemDetection();

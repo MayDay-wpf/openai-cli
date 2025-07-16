@@ -94,8 +94,10 @@ export class NativeInput {
                         break;
 
                     case 13: // Enter
-                        isCompleted = true;
-                        validateAndComplete(inputBuffer);
+                        // 仅当验证通过时才标记为完成，否则允许用户继续输入
+                        if (validateAndComplete(inputBuffer)) {
+                            isCompleted = true;
+                        }
                         break;
 
                     case 127: // Backspace
