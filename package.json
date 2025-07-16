@@ -1,6 +1,6 @@
 {
   "name": "openai-cli-unofficial",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A powerful OpenAI CLI Coding Agent built with TypeScript",
   "main": "dist/index.js",
   "bin": {
