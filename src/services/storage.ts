@@ -675,20 +675,39 @@ export class StorageService {
    */
   static getBuiltInLspServices(): Record<string, LspServer> {
     return {
+      'go': {
+        disabled: false,
+        command: 'gopls'
+      },
       'typescript': {
+        disabled: false,
+        command: 'typescript-language-server',
+        args: ['--stdio']
+      },
+      'javascript': {
         disabled: false,
         command: 'typescript-language-server',
         args: ['--stdio']
       },
       'python': {
         disabled: false,
-        command: 'pylsp',
-        args: []
+        command: 'pylsp'
       },
-      'javascript': {
+      'rust': {
         disabled: false,
-        command: 'typescript-language-server',
-        args: ['--stdio']
+        command: 'rust-analyzer'
+      },
+      'java': {
+        disabled: false,
+        command: 'jdtls'
+      },
+      'cpp': {
+        disabled: false,
+        command: 'clangd'
+      },
+      'c': {
+        disabled: false,
+        command: 'clangd'
       }
     };
   }

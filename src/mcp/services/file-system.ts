@@ -74,17 +74,17 @@ export class FileSystemService extends BaseMCPService {
             },
             {
                 name: 'search_files',
-                description: '通过文件名搜索文件。当用户没有提及文件路径时，主动搜索文件。',
+                description: 'Search for files by filename. When the user does not mention a file path, proactively search for the file.',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         query: {
                             type: 'string',
-                            description: '要搜索的文件名或部分文件名。例如: "service.ts"'
+                            description: 'The filename or partial filename to search for. Example: "service.ts"'
                         },
                         basePath: {
                             type: 'string',
-                            description: '开始搜索的目录路径。例如: "src/"',
+                            description: 'The directory path to start searching from. Example: "src/"',
                             default: '.'
                         }
                     },
@@ -93,17 +93,17 @@ export class FileSystemService extends BaseMCPService {
             },
             {
                 name: 'search_file_content',
-                description: '模糊查询关键词，获取所有包含该关键词内容的文件路径。当用户没有提及文件，只提及某个函数或功能时，主动搜索。',
+                description: 'Fuzzy search for keywords, get all file paths containing the keyword content. When the user does not mention a file, proactively search for the file when only mentioning a function or feature.',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         keyword: {
                             type: 'string',
-                            description: '要搜索的关键词或代码片段。例如: "handleReadFile"'
+                            description: 'The keyword or code snippet to search for. Example: "handleReadFile"'
                         },
                         basePath: {
                             type: 'string',
-                            description: '开始搜索的目录路径。例如: "src/"',
+                            description: 'The directory path to start searching from. Example: "src/"',
                             default: '.'
                         }
                     },
@@ -307,15 +307,13 @@ export class FileSystemService extends BaseMCPService {
             // Calculate token count (rough estimation)
             const tokenCount = this.estimateTokenCount(finalContent);
 
-            // LSP 检测
+            // LSP 语法检查
             const lspDetection = await LspDetector.detectLspForFile(targetPath);
             const lspSuggestion = LspDetector.generateLspSuggestion(lspDetection);
 
-            // 打印 LSP 检测详情到控制台
-            console.log(`📃 : ${targetPath}(${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines})`);
-            if (lspDetection.suggestion) {
-                console.log(`📡 LSP: ${lspDetection.suggestion}`);
-            }
+            // 打印文件读取信息到控制台
+            console.log(`📃 Read file: ${targetPath} (${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines})`);
+            // LSP检测器已经在内部打印了详细的语法检查结果
 
             const message = `✅ **File read successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Lines:** ${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines}\n**Tokens:** ~${tokenCount}\n**Modified:** ${stats.mtime.toLocaleString()}\n\n${isPartial ? '*Partial content - use startLine/endLine to read different sections.*' : '*Complete file content loaded.*'}${lspSuggestion}`;
             const response = `${message}\n\n---\n\n${finalContent}`;
@@ -549,15 +547,13 @@ export class FileSystemService extends BaseMCPService {
             fs.writeFileSync(targetPath, content, encoding as BufferEncoding);
             const stats = fs.statSync(targetPath);
 
-            // LSP 检测 - 在文件创建后进行
+            // LSP 语法检查 - 在文件创建后进行
             const lspDetection = await LspDetector.detectLspForFile(targetPath);
             const lspSuggestion = LspDetector.generateLspSuggestion(lspDetection);
             
-            // 打印 LSP 检测详情到控制台
-            console.log(`📄 : ${targetPath} (${content.length} chars)`);
-            if (lspDetection.suggestion) {
-                console.log(`📡 LSP: ${lspDetection.suggestion}`);
-            }
+            // 打印文件创建信息到控制台
+            console.log(`📄 Create file: ${targetPath} (${content.length} chars)`);
+            // LSP检测器已经在内部打印了详细的语法检查结果
 
             const diff = createPatch(targetPath, '', content);
             
@@ -752,15 +748,13 @@ export class FileSystemService extends BaseMCPService {
             const contextLines = 30;
             const newContentLineCount = newContentLines.length;
 
-            // LSP 检测 - 在文件编辑后进行
+            // LSP 语法检查 - 在文件编辑后进行
             const lspDetection = await LspDetector.detectLspForFile(targetPath);
             const lspSuggestion = LspDetector.generateLspSuggestion(lspDetection);
             
-            // 打印 LSP 检测详情到控制台
-            console.log(`✏️ : ${targetPath} (edited lines ${params.startLine}-${params.startLine + newContentLineCount - 1})`);
-            if (lspDetection.suggestion) {
-                console.log(`📡 LSP: ${lspDetection.suggestion}`);
-            }
+            // 打印文件编辑信息到控制台
+            console.log(`✏️ Edit file: ${targetPath} (line ${params.startLine}-${params.startLine + newContentLineCount - 1})`);
+            // LSP检测器已经在内部打印了详细的语法检查结果
 
             // Calculate the display range
             const displayStartLine = Math.max(1, params.startLine - contextLines);
