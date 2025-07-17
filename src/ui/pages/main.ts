@@ -426,10 +426,9 @@ export class MainPage {
       const redrawInputLine = () => {
         if (isDestroyed) return;
 
-        // 清除当前行并重新显示
-        const prompt = chalk.cyan(this.currentMessages.main.prompt);
-        process.stdout.write('\x1B[2K\x1B[0G');
-        process.stdout.write(prompt + currentInput);
+        // 简单直接的重绘：清除当前行并重新输出
+        process.stdout.write('\r\x1B[2K');
+        process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + currentInput);
 
         // 重新定位光标
         const promptWidth = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
@@ -441,64 +440,54 @@ export class MainPage {
       const showSuggestions = (state: InputState) => {
         if (!state.showingSuggestions || state.suggestions.length === 0 || isDestroyed) return;
 
-        // 显示标题
+        // 直接在当前行下方输出建议，不使用光标保存恢复
         const title = this.inputHandler.getSuggestionTitle(state.suggestionsType);
-        if (title) {
-          process.stdout.write('\n' + title + '\n');
-        } else {
-          process.stdout.write('\n');
-        }
-
-        // 显示建议
         const renderedSuggestions = this.inputHandler.renderSuggestions(
           state.suggestions,
           state.selectedIndex
         );
 
+        // 输出建议列表
+        process.stdout.write('\n');
+        if (title) {
+          process.stdout.write(title + '\n');
+        }
         renderedSuggestions.forEach(suggestion => {
           process.stdout.write(suggestion + '\n');
         });
 
-        // 返回到输入行
-        const linesToGoUp = renderedSuggestions.length + (title ? 2 : 1);
-        process.stdout.write(`\x1B[${linesToGoUp}A`);
-
-        // 重新计算光标位置：提示符长度 + 当前输入显示宽度
-        const promptLength = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
-        const inputWidth = StringUtils.getDisplayWidth(currentInput);
-        process.stdout.write(`\x1B[${promptLength + inputWidth + 1}G`);
+        // 向上移动回输入行
+        const totalLines = 1 + (title ? 1 : 0) + renderedSuggestions.length;
+        process.stdout.write(`\x1B[${totalLines}A`);
+        
+        // 重绘输入行确保显示正确
+        redrawInputLine();
       };
 
       // 隐藏建议列表
       const hideSuggestions = () => {
-        if (!currentState?.showingSuggestions || currentState.suggestions.length === 0 || isDestroyed) return;
+        if (isDestroyed) return;
 
-        // 移动到建议列表开始位置并清除
-        process.stdout.write('\x1B[1B'); // 下移一行到列表开始
-
-        // 清除标题行（如果有）
-        const hasTitle = !!this.inputHandler.getSuggestionTitle(currentState.suggestionsType);
-        if (hasTitle) {
-          process.stdout.write('\x1B[2K'); // 清除标题行
-          process.stdout.write('\x1B[1B'); // 下移到建议开始
+        // 如果没有建议状态，直接返回
+        if (!currentState?.showingSuggestions || !currentState.suggestions?.length) {
+          return;
         }
 
-        // 清除所有建议行
-        for (let i = 0; i < currentState.suggestions.length; i++) {
-          process.stdout.write('\x1B[2K'); // 清除整行
-          if (i < currentState.suggestions.length - 1) {
-            process.stdout.write('\x1B[1B'); // 下移一行
-          }
+        // 计算建议列表占用的行数
+        const title = this.inputHandler.getSuggestionTitle(currentState.suggestionsType);
+        const suggestionsCount = currentState.suggestions.length;
+        const totalLines = 1 + (title ? 1 : 0) + suggestionsCount;
+
+        // 向下移动到建议列表开始位置
+        process.stdout.write(`\x1B[${totalLines}B`);
+
+        // 向上清除每一行
+        for (let i = 0; i < totalLines; i++) {
+          process.stdout.write('\x1B[1A\x1B[2K'); // 向上一行并清除
         }
 
-        // 返回到输入行
-        const linesToGoUp = currentState.suggestions.length + (hasTitle ? 1 : 0);
-        process.stdout.write(`\x1B[${linesToGoUp}A`);
-
-        // 重新计算光标位置，使用显示宽度而不是字符长度
-        const promptLength = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
-        const inputWidth = StringUtils.getDisplayWidth(currentInput);
-        process.stdout.write(`\x1B[${promptLength + inputWidth + 1}G`);
+        // 重绘输入行
+        redrawInputLine();
       };
 
       // 更新显示
@@ -508,27 +497,63 @@ export class MainPage {
         // 更新选中文件列表
         this.inputHandler.updateSelectedFiles(currentInput);
 
-        // 隐藏当前建议
-        if (currentState?.showingSuggestions) {
-          hideSuggestions();
-        }
+        // 总是先清除下方内容，避免残留（hideSuggestions 会重绘输入行）
+        hideSuggestions();
 
         // 获取新状态
         const newState = await this.inputHandler.analyzInput(currentInput);
         currentState = newState;
 
-        // 显示新建议
+        // 显示新建议（如果有）
         if (newState.showingSuggestions) {
           showSuggestions(newState);
-        } else {
-          // 如果没有建议，也要确保光标位置正确
-          redrawInputLine();
         }
+        // 注意：不需要 else 分支，因为 hideSuggestions 已经重绘了输入行
       };
 
       // 强制刷新输入行显示
       const refreshInputLine = () => {
         if (isDestroyed) return;
+        redrawInputLine();
+      };
+
+      // 高效更新建议列表选中状态（避免完全重绘）
+      const updateSuggestionSelection = (newIndex: number) => {
+        if (!currentState?.showingSuggestions || isDestroyed) return;
+        
+        currentState.selectedIndex = newIndex;
+        
+        // 只重新渲染建议列表，避免完全重绘
+        const title = this.inputHandler.getSuggestionTitle(currentState.suggestionsType);
+        const renderedSuggestions = this.inputHandler.renderSuggestions(
+          currentState.suggestions,
+          currentState.selectedIndex
+        );
+        
+        // 计算建议列表占用的行数
+        const totalLines = 1 + (title ? 1 : 0) + renderedSuggestions.length;
+        
+        // 向下移动到建议列表开始位置
+        process.stdout.write(`\x1B[${totalLines}B`);
+        
+        // 向上清除每一行
+        for (let i = 0; i < totalLines; i++) {
+          process.stdout.write('\x1B[1A\x1B[2K'); // 向上一行并清除
+        }
+        
+        // 重新输出建议列表
+        process.stdout.write('\n');
+        if (title) {
+          process.stdout.write(title + '\n');
+        }
+        renderedSuggestions.forEach(suggestion => {
+          process.stdout.write(suggestion + '\n');
+        });
+        
+        // 向上移动回输入行
+        process.stdout.write(`\x1B[${totalLines}A`);
+        
+        // 重绘输入行确保显示正确
         redrawInputLine();
       };
 
@@ -663,22 +688,18 @@ export class MainPage {
           if (key.length >= 3 && key.startsWith('\x1B[')) {
             if (key === '\x1B[A') { // 上箭头
               if (currentState?.showingSuggestions && currentState.suggestions.length > 0) {
-                hideSuggestions();
                 const newIndex = currentState.selectedIndex > 0
                   ? currentState.selectedIndex - 1
                   : currentState.suggestions.length - 1;
-                currentState.selectedIndex = newIndex;
-                showSuggestions(currentState);
+                updateSuggestionSelection(newIndex);
               }
               return;
             } else if (key === '\x1B[B') { // 下箭头
               if (currentState?.showingSuggestions && currentState.suggestions.length > 0) {
-                hideSuggestions();
                 const newIndex = currentState.selectedIndex < currentState.suggestions.length - 1
                   ? currentState.selectedIndex + 1
                   : 0;
-                currentState.selectedIndex = newIndex;
-                showSuggestions(currentState);
+                updateSuggestionSelection(newIndex);
               }
               return;
             } else if (key === '\x1B[D') { // 左箭头
@@ -688,7 +709,10 @@ export class MainPage {
                   currentState.showingSuggestions = false;
                 }
                 cursorPosition--;
-                redrawInputLine();
+                // 如果没有建议显示，手动重绘输入行
+                if (!currentState?.showingSuggestions) {
+                  redrawInputLine();
+                }
               }
               return;
             } else if (key === '\x1B[C') { // 右箭头
@@ -698,7 +722,10 @@ export class MainPage {
                   currentState.showingSuggestions = false;
                 }
                 cursorPosition++;
-                redrawInputLine();
+                // 如果没有建议显示，手动重绘输入行
+                if (!currentState?.showingSuggestions) {
+                  redrawInputLine();
+                }
               }
               return;
             }
@@ -722,7 +749,16 @@ export class MainPage {
 
             // 处理粘贴内容
             if (key.includes('\n') || key.includes('\r') || key.length > 10) {
-              textToInsert = StringUtils.processPastedText(key);
+              // 检测是否在文件输入模式（输入中包含@符号）
+              const hasFileReference = currentInput.includes('@');
+              
+              if (hasFileReference) {
+                // 文件输入模式：保留换行符
+                textToInsert = StringUtils.processFileContentPaste(key);
+              } else {
+                // 普通输入模式：移除换行符
+                textToInsert = StringUtils.processPastedText(key);
+              }
             }
 
             if (textToInsert) {

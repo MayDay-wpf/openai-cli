@@ -88,6 +88,11 @@ export class ConfigPage {
         description: messages.config.menuDescription.maxToolCalls
       },
       {
+        name: messages.config.menuOptions.lspConfig,
+        value: 'lspConfig',
+        description: messages.config.menuDescription.lspConfig
+      },
+      {
         name: messages.config.menuOptions.terminalSensitiveWords,
         value: 'terminalSensitiveWords',
         description: messages.config.menuDescription.terminalSensitiveWords
@@ -156,6 +161,10 @@ export class ConfigPage {
 
       case 'maxToolCalls':
         await this.editMaxToolCalls();
+        break;
+
+      case 'lspConfig':
+        await this.editLspConfig();
         break;
 
       case 'terminalSensitiveWords':
@@ -767,6 +776,27 @@ export class ConfigPage {
       confirmedFunctions.length > 0 ? messages.config.labels.configured : messages.config.labels.notConfigured
     );
 
+    // 显示LSP配置
+    const lspConfig = StorageService.getLspConfig();
+    const lspServerNames = Object.keys(lspConfig.lsp);
+    const hasLspServers = lspServerNames.length > 0;
+
+    let lspDisplayValue: string | undefined;
+    if (hasLspServers) {
+      // 显示服务器名称列表，如果太多则显示前几个
+      if (lspServerNames.length <= 3) {
+        lspDisplayValue = lspServerNames.join(', ');
+      } else {
+        lspDisplayValue = `${lspServerNames.slice(0, 2).join(', ')} +${lspServerNames.length - 2} more`;
+      }
+    }
+
+    this.displayConfigItem(
+      messages.config.labels.lspConfig,
+      lspDisplayValue,
+      hasLspServers ? messages.config.labels.configured : messages.config.labels.notConfigured
+    );
+
     const terminalSensitiveWords = config.terminalSensitiveWords || [];
     let terminalWordsDisplayValue: string | undefined;
     if (terminalSensitiveWords.length > 0) {
@@ -924,6 +954,69 @@ export class ConfigPage {
 
       process.stdin.on('data', keyHandler);
     });
+  }
+
+  private async editLspConfig(): Promise<void> {
+    const messages = languageService.getMessages();
+    const currentConfigJson = StorageService.getLspConfigJson();
+
+    console.log('  ' + chalk.cyan.bold(messages.config.menuOptions.lspConfig));
+    console.log('  ' + chalk.gray(messages.config.menuDescription.lspConfig));
+
+    if (currentConfigJson && currentConfigJson !== '{\n  "lsp": {}\n}') {
+      console.log('  ' + chalk.gray(`${messages.config.labels.status}: `));
+      const lines = currentConfigJson.split('\n');
+      lines.slice(0, 5).forEach(line => {
+        console.log('    ' + chalk.gray(line));
+      });
+      if (lines.length > 5) {
+        console.log('    ' + chalk.gray('...'));
+      }
+    }
+    console.log();
+    console.log('  ' + chalk.gray(messages.config.messages.lspConfigEditorPrompt));
+
+    try {
+      const lspConfigJson = await editor({
+        message: '  ' + messages.config.prompts.lspConfigInput + ':',
+        default: currentConfigJson || messages.config.prompts.lspConfigPlaceholder,
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return messages.config.messages.invalidInput;
+          }
+
+          // 使用新的验证方法
+          const validation = StorageService.validateLspConfigJson(input.trim());
+          if (!validation.isValid) {
+            return validation.error || messages.config.messages.invalidJson;
+          }
+
+          return true;
+        }
+      });
+
+      // 重置终端状态，防止影响后续交互
+      this.resetTerminalState();
+
+      if (lspConfigJson && lspConfigJson.trim()) {
+        await AnimationUtils.showActionAnimation(messages.config.actions.saving);
+
+        // 验证并保存配置
+        const validation = StorageService.validateLspConfigJson(lspConfigJson.trim());
+        if (validation.isValid && validation.parsedConfig) {
+          StorageService.saveLspConfig(validation.parsedConfig);
+
+          // 显示保存成功消息
+          console.log('  ' + chalk.green('✓ ' + messages.config.messages.configSaved));
+          console.log('  ' + chalk.gray(messages.config.messages.lspConfigUpdated));
+        }
+      }
+    } catch (error) {
+      // 用户按 ESC 或 Ctrl+C 取消输入，也需要重置终端状态
+      this.resetTerminalState();
+      console.log();
+      return;
+    }
   }
 
   private async editTerminalSensitiveWords(): Promise<void> {

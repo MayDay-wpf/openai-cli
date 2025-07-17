@@ -16,12 +16,15 @@ export class StringUtils {
 
   /**
    * 计算字符串在终端中的显示宽度
-   * 考虑中文字符、emoji等宽字符
+   * 考虑中文字符、emoji等宽字符，正确处理ANSI颜色代码
    */
   static getDisplayWidth(str: string): number {
+    // 先移除所有ANSI转义序列（包括颜色代码）
+    const cleanStr = str.replace(/\x1b\[[0-9;]*m/g, '');
+    
     let width = 0;
 
-    for (const char of str) {
+    for (const char of cleanStr) {
       const code = char.codePointAt(0) || 0;
 
       // 控制字符不占用显示宽度
@@ -80,6 +83,7 @@ export class StringUtils {
 
   /**
    * 处理粘贴的文本，移除换行符并清理内容
+   * 用于一般的输入场景
    */
   static processPastedText(text: string): string {
     return text
@@ -88,6 +92,18 @@ export class StringUtils {
       .replace(/\r/g, ' ')    // Mac 换行符
       .replace(/\t/g, ' ')    // 制表符
       .replace(/\s+/g, ' ')   // 多个连续空格合并为一个
+      .trim();
+  }
+
+  /**
+   * 处理文件内容粘贴，保留换行符但清理其他格式
+   * 用于文件输入场景，如@文件引用时的内容粘贴
+   */
+  static processFileContentPaste(text: string): string {
+    return text
+      .replace(/\r\n/g, '\n')  // 统一换行符为Unix格式
+      .replace(/\r/g, '\n')    // Mac换行符转换为Unix格式
+      .replace(/\t/g, '  ')    // 制表符转换为两个空格
       .trim();
   }
 } 

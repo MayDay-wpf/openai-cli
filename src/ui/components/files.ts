@@ -95,6 +95,80 @@ export class FileSearchManager {
   }
 
   /**
+   * 同步搜索文件，支持模糊匹配（避免异步导致的建议显示问题）
+   */
+  searchFilesSync(query: string, maxResults: number = 10): FileSearchResult[] {
+    // 如果查询为空，返回最近的一些文件
+    if (!query.trim()) {
+      this.ensureCacheUpdatedSync();
+      return this.cachedFiles.slice(0, maxResults);
+    }
+
+    this.ensureCacheUpdatedSync();
+    
+    const normalizedQuery = query.toLowerCase();
+    
+    // 模糊匹配算法
+    const filtered = this.cachedFiles.filter(file => {
+      const fileName = file.name.toLowerCase();
+      const relativePath = file.relativePath.toLowerCase();
+      
+      // 1. 文件名开头匹配（优先级最高）
+      if (fileName.startsWith(normalizedQuery)) {
+        return true;
+      }
+      
+      // 2. 路径开头匹配
+      if (relativePath.startsWith(normalizedQuery)) {
+        return true;
+      }
+      
+      // 3. 文件名包含匹配
+      if (fileName.includes(normalizedQuery)) {
+        return true;
+      }
+      
+      // 4. 路径包含匹配
+      if (relativePath.includes(normalizedQuery)) {
+        return true;
+      }
+      
+      // 5. 模糊匹配（字符序列匹配）
+      return this.fuzzyMatch(fileName, normalizedQuery) || 
+             this.fuzzyMatch(relativePath, normalizedQuery);
+    });
+
+    // 按匹配优先级排序
+    const sorted = filtered.sort((a, b) => {
+      const aName = a.name.toLowerCase();
+      const bName = b.name.toLowerCase();
+      const aPath = a.relativePath.toLowerCase();
+      const bPath = b.relativePath.toLowerCase();
+      
+      // 文件名开头匹配优先
+      const aNameStarts = aName.startsWith(normalizedQuery);
+      const bNameStarts = bName.startsWith(normalizedQuery);
+      if (aNameStarts && !bNameStarts) return -1;
+      if (!aNameStarts && bNameStarts) return 1;
+      
+      // 路径开头匹配次优先
+      const aPathStarts = aPath.startsWith(normalizedQuery);
+      const bPathStarts = bPath.startsWith(normalizedQuery);
+      if (aPathStarts && !bPathStarts) return -1;
+      if (!aPathStarts && bPathStarts) return 1;
+      
+      // 文件类型优先级：文件 > 目录
+      if (a.type === 'file' && b.type === 'directory') return -1;
+      if (a.type === 'directory' && b.type === 'file') return 1;
+      
+      // 按文件名长度排序（短的优先）
+      return aName.length - bName.length;
+    });
+
+    return sorted.slice(0, maxResults);
+  }
+
+  /**
    * 模糊匹配算法
    */
   private fuzzyMatch(text: string, pattern: string): boolean {
@@ -540,6 +614,46 @@ export class FileSearchManager {
     this.lastCacheTime = now;
   }
 
+     /**
+    * 同步确保缓存是最新的
+    */
+   private ensureCacheUpdatedSync(): void {
+     const now = Date.now();
+     if (now - this.lastCacheTime < this.cacheExpiration && this.cachedFiles.length > 0) {
+       return;
+     }
+
+     // 同步加载gitignore模式
+     this.loadGitignorePatternsSync();
+     this.cachedFiles = this.buildFileCacheSync();
+     this.lastCacheTime = now;
+   }
+
+   /**
+    * 同步加载gitignore模式
+    */
+   private loadGitignorePatternsSync(): void {
+     try {
+       const gitignorePath = path.join(this.currentDirectory, '.gitignore');
+       if (fs.existsSync(gitignorePath)) {
+         const stats = fs.statSync(gitignorePath);
+         if (stats.mtime.getTime() === this.gitignoreLastModified) {
+           return; // 文件没有变化
+         }
+         
+         const content = fs.readFileSync(gitignorePath, 'utf8');
+         this.gitignorePatterns = this.parseGitignoreContent(content, gitignorePath);
+         this.gitignoreLastModified = stats.mtime.getTime();
+       } else {
+         this.gitignorePatterns = [];
+         this.gitignoreLastModified = 0;
+       }
+     } catch (error) {
+       console.warn('Failed to load .gitignore:', error);
+       this.gitignorePatterns = [];
+     }
+   }
+
   /**
    * 构建文件缓存
    */
@@ -548,6 +662,21 @@ export class FileSearchManager {
     
     try {
       await this.walkDirectory(this.currentDirectory, files, 0, 3); // 最多3层深度
+    } catch (error) {
+      console.warn('Error building file cache:', error);
+    }
+    
+    return files;
+  }
+
+  /**
+   * 同步构建文件缓存
+   */
+  private buildFileCacheSync(): FileSearchResult[] {
+    const files: FileSearchResult[] = [];
+    
+    try {
+      this.walkDirectorySync(this.currentDirectory, files, 0, 3); // 最多3层深度
     } catch (error) {
       console.warn('Error building file cache:', error);
     }
@@ -591,6 +720,49 @@ export class FileSearchManager {
         // 如果是目录且没有达到最大深度，继续递归
         if (isDirectory && currentDepth < maxDepth) {
           await this.walkDirectory(fullPath, results, currentDepth + 1, maxDepth);
+        }
+      }
+    } catch (error) {
+      // 忽略无法访问的目录
+    }
+  }
+
+  /**
+   * 同步递归遍历目录
+   */
+  private walkDirectorySync(
+    dirPath: string, 
+    results: FileSearchResult[], 
+    currentDepth: number, 
+    maxDepth: number
+  ): void {
+    if (currentDepth > maxDepth) return;
+
+         try {
+       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const relativePath = path.relative(this.currentDirectory, fullPath);
+        const isDirectory = entry.isDirectory();
+        
+        // 使用动态忽略规则
+        if (this.shouldIgnore(relativePath, isDirectory)) {
+          continue;
+        }
+
+        const fileResult: FileSearchResult = {
+          path: fullPath,
+          name: entry.name,
+          relativePath: relativePath,
+          type: isDirectory ? 'directory' : 'file'
+        };
+        
+        results.push(fileResult);
+        
+        // 如果是目录且没有达到最大深度，继续递归
+        if (isDirectory && currentDepth < maxDepth) {
+          this.walkDirectorySync(fullPath, results, currentDepth + 1, maxDepth);
         }
       }
     } catch (error) {

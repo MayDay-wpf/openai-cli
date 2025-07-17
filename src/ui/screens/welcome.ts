@@ -11,8 +11,22 @@ import { ConfigPage } from '../pages/config';
 import { HelpPage } from '../pages/help';
 import { MainPage } from '../pages/main';
 
+const packageJson = require('../../../package.json');
+
 export class WelcomeScreen {
   private readonly gradients = AnimationUtils.getGradients();
+  
+  /**
+   * 从 package.json 读取版本信息
+   */
+  private getVersion(): string {
+    try {
+      return packageJson.version || '0.0.0';
+    } catch (error) {
+      console.debug('Failed to read version from package.json:', error);
+      return '0.0.0';
+    }
+  }
 
   async show(): Promise<void> {
     await this.showSplashScreen();
@@ -106,7 +120,7 @@ export class WelcomeScreen {
     console.log();
 
     // 添加版本信息和徽章
-    const versionBadge = '  [ v0.1.6 ] ';
+    const versionBadge = `  [ v${this.getVersion()} ] `;
     const statusBadge = '  [ BETA ] ';
     const aiBadge = '  [ AI-POWERED ] ';
 
