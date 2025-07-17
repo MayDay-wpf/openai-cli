@@ -398,6 +398,91 @@ export interface Messages {
       no: string;
     };
   };
+  // 新增终端服务相关的国际化配置
+  terminal: {
+    execution: {
+      executing: string;
+      workingDirectory: string;
+      timeoutDetection: string;
+      realTimeOutput: string;
+      interactiveMode: string;
+      backgroundMode: string;
+      separator: string;
+      completed: string;
+      failed: string;
+      success: string;
+      exitCode: string;
+      signal: string;
+      error: string;
+      pid: string;
+      processId: string;
+      startTime: string;
+    };
+    smartDetection: {
+      timeoutPrompt: string;
+      longRunningDetected: string;
+      choicePrompt: string;
+      options: {
+        background: {
+          name: string;
+          description: string;
+        };
+        wait: {
+          name: string;
+          description: string;
+        };
+        kill: {
+          name: string;
+          description: string;
+        };
+      };
+      backgroundMoved: string;
+      continueWaiting: string;
+      userTerminated: string;
+      autoBackground: string;
+    };
+    backgroundProcess: {
+      launching: string;
+      launched: string;
+      startupFailed: string;
+      startupOutput: string;
+      managementTips: string;
+      listCommand: string;
+      killCommand: string;
+      normalExit: string;
+      abnormalExit: string;
+      maybeExited: string;
+    };
+    interactiveProcess: {
+      executing: string;
+      supportInteraction: string;
+      startupFailed: string;
+      executionSuccess: string;
+      executionFailed: string;
+    };
+    processManagement: {
+      listTitle: string;
+      noProcesses: string;
+      processTerminated: string;
+      processNotExists: string;
+      terminationFailed: string;
+      directory: string;
+      command: string;
+    };
+    responses: {
+      commandRefused: string;
+      commandCancelled: string;
+      commandSuccess: string;
+      commandFailed: string;
+      backgroundSuccess: string;
+      backgroundFailed: string;
+      interactiveSuccess: string;
+      interactiveFailed: string;
+      outputSummary: string;
+      errorOutput: string;
+      checkOutput: string;
+    };
+  };
   systemDetector: {
     title: string;
     checking: string;

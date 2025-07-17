@@ -464,6 +464,91 @@ export const en: Messages = {
       no: 'No'
     }
   },
+  // Terminal service internationalization configuration
+  terminal: {
+    execution: {
+      executing: 'Executing command',
+      workingDirectory: 'Working directory',
+      timeoutDetection: 'Timeout detection',
+      realTimeOutput: 'This command will display real-time output',
+      interactiveMode: 'This command supports real-time output and user interaction',
+      backgroundMode: 'This command will run in the background, you can continue other operations',
+      separator: '━'.repeat(60),
+      completed: 'Command completed',
+      failed: 'Command execution failed',
+      success: 'Command executed successfully',
+      exitCode: 'Exit code',
+      signal: 'Signal',
+      error: 'Error',
+      pid: 'PID',
+      processId: 'Process ID',
+      startTime: 'Start time'
+    },
+    smartDetection: {
+      timeoutPrompt: 'seconds',
+      longRunningDetected: 'Command has been running for more than {timeout} seconds, it may be a long-running command',
+      choicePrompt: 'This command seems to require a long time to run, how would you like to handle it?',
+      options: {
+        background: {
+          name: 'Move to background (Recommended)',
+          description: 'The command will continue running in the background, you can continue other operations'
+        },
+        wait: {
+          name: 'Continue waiting',
+          description: 'Continue waiting for the command to complete'
+        },
+        kill: {
+          name: 'Force terminate',
+          description: 'Immediately terminate command execution'
+        }
+      },
+      backgroundMoved: 'Command has been moved to background',
+      continueWaiting: 'Continue waiting for command completion...',
+      userTerminated: 'Command has been terminated by user',
+      autoBackground: 'Command automatically moved to background'
+    },
+    backgroundProcess: {
+      launching: 'Starting background command',
+      launched: 'Background command started successfully',
+      startupFailed: 'Background command startup failed',
+      startupOutput: 'Startup output preview',
+      managementTips: 'Manage background processes',
+      listCommand: 'Use `list_background_processes` to view all background processes',
+      killCommand: 'Use `kill_background_process` to terminate specific process',
+      normalExit: 'Background process exited normally',
+      abnormalExit: 'Background process exited abnormally',
+      maybeExited: 'Process may have already exited or failed to start'
+    },
+    interactiveProcess: {
+      executing: 'Executing interactive command',
+      supportInteraction: 'This command supports real-time output and user interaction',
+      startupFailed: 'Interactive command startup failed',
+      executionSuccess: 'Interactive command executed successfully',
+      executionFailed: 'Interactive command execution failed'
+    },
+    processManagement: {
+      listTitle: 'Background running processes list',
+      noProcesses: 'Currently no background running processes',
+      processTerminated: 'Process has been terminated',
+      processNotExists: 'Process {processId} does not exist',
+      terminationFailed: 'Failed to terminate process',
+      directory: 'Directory',
+      command: 'Command'
+    },
+    responses: {
+      commandRefused: 'The user refused to execute the command, and the command was canceled, but this does not affect subsequent execution. You can remind the user to execute the command manually.',
+      commandCancelled: 'Command has been terminated by user',
+      commandSuccess: 'Command executed successfully',
+      commandFailed: 'Command execution failed',
+      backgroundSuccess: 'Background command has been started',
+      backgroundFailed: 'Background command startup failed',
+      interactiveSuccess: 'Interactive command executed successfully',
+      interactiveFailed: 'Interactive command startup failed',
+      outputSummary: 'Output summary',
+      errorOutput: 'Error output',
+      checkOutput: 'Please check the terminal output above for detailed information'
+    }
+  },
   systemDetector: {
     title: 'System Status Detection',
     checking: 'Detecting system configuration...',

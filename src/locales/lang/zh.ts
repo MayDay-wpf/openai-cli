@@ -464,6 +464,91 @@ export const zh: Messages = {
       no: '否'
     }
   },
+  // 新增终端服务相关的国际化配置
+  terminal: {
+    execution: {
+      executing: '执行命令',
+      workingDirectory: '工作目录',
+      timeoutDetection: '超时检测',
+      realTimeOutput: '此命令将显示实时输出',
+      interactiveMode: '此命令支持实时输出和用户交互',
+      backgroundMode: '此命令将在后台运行，您可以继续其他操作',
+      separator: '━'.repeat(60),
+      completed: '命令已完成',
+      failed: '命令执行失败',
+      success: '命令执行成功',
+      exitCode: '退出码',
+      signal: '信号',
+      error: '错误',
+      pid: 'PID',
+      processId: '进程ID',
+      startTime: '启动时间'
+    },
+    smartDetection: {
+      timeoutPrompt: '秒',
+      longRunningDetected: '命令运行超过 {timeout} 秒，可能是长期运行的命令',
+      choicePrompt: '这个命令看起来需要长时间运行，你希望如何处理？',
+      options: {
+        background: {
+          name: '转为后台运行（推荐）',
+          description: '命令将在后台继续运行，你可以继续其他操作'
+        },
+        wait: {
+          name: '继续等待',
+          description: '继续等待命令完成'
+        },
+        kill: {
+          name: '强制终止',
+          description: '立即终止命令执行'
+        }
+      },
+      backgroundMoved: '命令已转为后台运行',
+      continueWaiting: '继续等待命令完成...',
+      userTerminated: '命令已被用户终止',
+      autoBackground: '命令自动转为后台运行'
+    },
+    backgroundProcess: {
+      launching: '启动后台命令',
+      launched: '后台命令启动成功',
+      startupFailed: '后台命令启动失败',
+      startupOutput: '启动输出预览',
+      managementTips: '管理后台进程',
+      listCommand: '使用 `list_background_processes` 查看所有后台进程',
+      killCommand: '使用 `kill_background_process` 终止指定进程',
+      normalExit: '后台进程正常退出',
+      abnormalExit: '后台进程异常退出',
+      maybeExited: '进程可能已经退出或启动失败'
+    },
+    interactiveProcess: {
+      executing: '执行交互式命令',
+      supportInteraction: '此命令支持实时输出和用户交互',
+      startupFailed: '交互式命令启动失败',
+      executionSuccess: '交互式命令执行成功',
+      executionFailed: '交互式命令执行失败'
+    },
+    processManagement: {
+      listTitle: '后台运行的进程列表',
+      noProcesses: '当前没有后台运行的进程',
+      processTerminated: '进程已终止',
+      processNotExists: '进程 {processId} 不存在',
+      terminationFailed: '终止进程失败',
+      directory: '目录',
+      command: '命令'
+    },
+    responses: {
+      commandRefused: 'The user refused to execute the command, and the command was canceled, but this does not affect subsequent execution. You can remind the user to execute the command manually.',
+      commandCancelled: '命令已被用户终止',
+      commandSuccess: '命令执行成功',
+      commandFailed: '命令执行出错',
+      backgroundSuccess: '后台命令已启动',
+      backgroundFailed: '后台命令启动失败',
+      interactiveSuccess: '交互式命令执行成功',
+      interactiveFailed: '交互式命令启动失败',
+      outputSummary: '输出摘要',
+      errorOutput: '错误输出',
+      checkOutput: '请查看上方终端输出获取详细信息'
+    }
+  },
   systemDetector: {
     title: '系统状态检测',
     checking: '正在检测系统配置...',
