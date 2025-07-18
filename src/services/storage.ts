@@ -155,11 +155,10 @@ export class StorageService {
           lsp: {}
         }
       };
-      // 确保内置服务也添加到默认配置中
+      // 确保内置MCP服务添加到默认配置中，但LSP服务保持空配置
       const finalConfig = {
         ...defaultConfig,
-        mcpConfig: StorageService.ensureBuiltInMcpServices(defaultConfig.mcpConfig),
-        lspConfig: StorageService.ensureBuiltInLspServices(defaultConfig.lspConfig)
+        mcpConfig: StorageService.ensureBuiltInMcpServices(defaultConfig.mcpConfig)
       };
       StorageService.writeConfig(finalConfig);
     }
@@ -606,46 +605,18 @@ export class StorageService {
     const config = StorageService.readConfig();
     let lspConfig = config.lspConfig || { lsp: {} };
 
-    // 确保系统自带的LSP服务存在，如果有更新则保存
-    const originalJson = JSON.stringify(lspConfig);
-    lspConfig = StorageService.ensureBuiltInLspServices(lspConfig);
-    const updatedJson = JSON.stringify(lspConfig);
-
-    // 如果配置有变化，立即保存
-    if (originalJson !== updatedJson) {
-      config.lspConfig = lspConfig;
-      StorageService.writeConfig(config);
-    }
-
+    // 不再强制确保系统自带的LSP服务存在，允许用户删除全部服务
     return lspConfig;
   }
 
-  /**
-   * 确保系统自带的LSP服务存在
-   */
-  private static ensureBuiltInLspServices(lspConfig: LspConfig): LspConfig {
-    const builtInServices = StorageService.getBuiltInLspServices();
 
-    // 检查所有内置服务
-    for (const [serviceName, serviceConfig] of Object.entries(builtInServices)) {
-      const existingConfig = lspConfig.lsp[serviceName];
-
-      if (!existingConfig) {
-        // 没有配置，添加新的内置服务配置
-        lspConfig.lsp[serviceName] = { ...serviceConfig };
-      }
-    }
-
-    return lspConfig;
-  }
 
   /**
    * 保存LSP配置
    */
   static saveLspConfig(lspConfig: LspConfig): void {
     const config = StorageService.readConfig();
-    // 确保保存时也包含系统自带的服务
-    lspConfig = StorageService.ensureBuiltInLspServices(lspConfig);
+    // 直接保存用户配置，不再强制添加系统自带的服务
     config.lspConfig = lspConfig;
     StorageService.writeConfig(config);
   }
@@ -671,14 +642,11 @@ export class StorageService {
   }
 
   /**
-   * 获取系统内置LSP服务列表
+   * 获取系统内置LSP服务列表（仅供参考，不强制安装）
+   * 注意：LSP服务现在允许用户完全删除，不会强制恢复
    */
   static getBuiltInLspServices(): Record<string, LspServer> {
     return {
-      'go': {
-        disabled: false,
-        command: 'gopls'
-      },
       'typescript': {
         disabled: false,
         command: 'typescript-language-server',
@@ -688,26 +656,6 @@ export class StorageService {
         disabled: false,
         command: 'typescript-language-server',
         args: ['--stdio']
-      },
-      'python': {
-        disabled: false,
-        command: 'pylsp'
-      },
-      'rust': {
-        disabled: false,
-        command: 'rust-analyzer'
-      },
-      'java': {
-        disabled: false,
-        command: 'jdtls'
-      },
-      'cpp': {
-        disabled: false,
-        command: 'clangd'
-      },
-      'c': {
-        disabled: false,
-        command: 'clangd'
       }
     };
   }
@@ -723,12 +671,20 @@ export class StorageService {
     try {
       const parsedConfig = JSON.parse(lspConfigJson) as LspConfig;
 
-      // 验证基本结构
+      // 验证基本结构 - 允许空的lsp对象
       if (!parsedConfig.lsp || typeof parsedConfig.lsp !== 'object') {
         const messages = getCurrentMessages('en');
         return {
           isValid: false,
           error: 'LSP configuration must have an "lsp" object'
+        };
+      }
+
+      // 如果lsp对象为空，那也是有效的配置（用户删除了所有LSP服务）
+      if (Object.keys(parsedConfig.lsp).length === 0) {
+        return {
+          isValid: true,
+          parsedConfig
         };
       }
 

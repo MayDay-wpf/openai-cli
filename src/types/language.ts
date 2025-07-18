@@ -488,12 +488,17 @@ export interface Messages {
     checking: string;
     roleTitle: string;
     mcpTitle: string;
+    lspTitle: string;
     noRole: string;
     noMcpServices: string;
     mcpConnecting: string;
     mcpConnected: string;
     mcpFailed: string;
     mcpNotFound: string;
+    lspEnabled: string;
+    lspDisabled: string;
+    lspNotFound: string;
+    lspError: string;
     toolsFound: string;
     noTools: string;
     serverStatus: string;
@@ -502,7 +507,9 @@ export interface Messages {
     progress: {
       detectingRole: string;
       detectingMcp: string;
+      detectingLsp: string;
       connectingMcp: string;
+      checkingLsp: string;
       fetchingTools: string;
       completed: string;
     };

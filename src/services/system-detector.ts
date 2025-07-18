@@ -19,11 +19,22 @@ export interface McpServerInfo {
     isBuiltIn?: boolean; // 标记是否为内置服务
 }
 
+export interface LspServerInfo {
+    name: string;
+    status: 'enabled' | 'disabled' | 'not_found' | 'error';
+    command?: string;
+    args?: string[];
+    error?: string;
+    isBuiltIn?: boolean; // 标记是否为内置服务
+}
+
 export interface SystemDetectionResult {
     hasRole: boolean;
     role?: string;
     hasMcpServices: boolean;
     mcpServers: McpServerInfo[];
+    hasLspServices: boolean;
+    lspServers: LspServerInfo[];
 }
 
 export class SystemDetector {
@@ -78,11 +89,35 @@ export class SystemDetector {
                 controller.stop();
             }
 
+            // 检测LSP服务
+            controller = AnimationUtils.showLoadingAnimation({
+                text: messages.progress.detectingLsp,
+                interval: 100
+            });
+            const lspConfig = StorageService.getLspConfig();
+            const hasLspServices = Object.keys(lspConfig.lsp).length > 0;
+            await this.delay(500);
+            controller.stop();
+
+            let lspServers: LspServerInfo[] = [];
+
+            if (hasLspServices) {
+                // 检测LSP服务状态
+                controller = AnimationUtils.showLoadingAnimation({
+                    text: messages.progress.checkingLsp,
+                    interval: 100
+                });
+                lspServers = await this.detectLspServers(lspConfig.lsp);
+                controller.stop();
+            }
+
             const result: SystemDetectionResult = {
                 hasRole,
                 role: config.role,
                 hasMcpServices,
-                mcpServers
+                mcpServers,
+                hasLspServices,
+                lspServers
             };
 
             return result;
@@ -94,118 +129,107 @@ export class SystemDetector {
     async displaySystemInfo(detectionResult: SystemDetectionResult): Promise<void> {
         const messages = languageService.getMessages().systemDetector;
 
-        // 显示角色信息
-        if (detectionResult.hasRole && detectionResult.role) {
-            this.displayRoleInfo(detectionResult.role);
-        }
-
-        // 显示MCP服务信息
-        if (detectionResult.hasMcpServices && detectionResult.mcpServers.length > 0) {
-            await this.displayMcpInfo(detectionResult.mcpServers);
-        }
-
-        // 如果都没有配置，显示准备就绪信息
-        if (!detectionResult.hasRole && !detectionResult.hasMcpServices) {
+        // 如果没有任何服务或角色配置，显示准备就绪信息
+        if (!detectionResult.hasRole && !detectionResult.hasMcpServices && !detectionResult.hasLspServices) {
             console.log();
             console.log('  ' + chalk.green('✓ ' + messages.ready));
             console.log();
-        }
-    }
-
-    private displayRoleInfo(role: string): void {
-        const messages = languageService.getMessages().systemDetector;
-
-        // 截取角色描述，如果太长则显示前几行
-        const lines = role.split('\n');
-        const displayLines = lines.slice(0, 5);
-        const hasMore = lines.length > 5;
-
-        let content = displayLines.join('\n');
-        if (hasMore) {
-            content += '\n...';
+            return;
         }
 
-        const roleBox = boxen(
-            chalk.white(content),
-            {
-                title: messages.roleTitle,
-                titleAlignment: 'center',
-                padding: 1,
-                margin: { top: 1, bottom: 1, left: 2, right: 2 },
-                borderStyle: 'round',
-                borderColor: 'blue'
-            }
-        );
-
-        console.log(roleBox);
-    }
-
-    private async displayMcpInfo(servers: McpServerInfo[]): Promise<void> {
-        const messages = languageService.getMessages().systemDetector;
-
+        // 构建系统状态显示内容
         let content = '';
+        let hasContent = false;
 
-        for (const server of servers) {
-            const statusIcon = this.getStatusIcon(server.status);
-            const statusColor = this.getStatusColor(server.status);
+        // 显示角色信息（如果有）
+        if (detectionResult.hasRole && detectionResult.role) {
+            const lines = detectionResult.role.split('\n');
+            const displayLines = lines.slice(0, 3); // 限制为3行
+            const hasMore = lines.length > 3;
 
-            content += `${statusIcon} ${chalk.white.bold(server.name)}\n`;
-
-            // 显示服务类型，内置服务特殊处理
-            if (server.isBuiltIn) {
-                content += `   ${chalk.gray('Type:')} ${chalk.green('BUILTIN')} ${chalk.gray(`(${messages.builtinServices.protected})`)}`;
-            } else {
-                content += `   ${chalk.gray('Type:')} ${chalk.white(server.type.toUpperCase())}`;
-
-                // 如果实际传输方式与配置不同，显示回退信息
-                if (server.actualTransport && server.actualTransport !== server.type) {
-                    content += chalk.gray(` → ${server.actualTransport.toUpperCase()}`);
-                }
+            content += chalk.cyan('● ') + chalk.white.bold('System Role') + '\n';
+            displayLines.forEach(line => {
+                content += '  ' + chalk.white(line.trim()) + '\n';
+            });
+            if (hasMore) {
+                content += '  ' + chalk.gray('...') + '\n';
             }
-            content += '\n';
-
-            if (server.url) {
-                content += `   ${chalk.gray('URL:')} ${chalk.white(server.url)}\n`;
-            } else if (server.command) {
-                content += `   ${chalk.gray('Command:')} ${chalk.white(server.command)}\n`;
-                if (server.args && server.args.length > 0) {
-                    content += `   ${chalk.gray('Args:')} ${chalk.white(server.args.join(' '))}\n`;
-                }
-            }
-
-            content += `   ${chalk.gray(messages.serverStatus)} ${statusColor(this.getStatusText(server.status))}\n`;
-
-            if (server.tools && server.tools.length > 0) {
-                content += `   ${chalk.gray(messages.toolsFound)} ${chalk.cyan(server.tools.length)}: ${chalk.white(server.tools.slice(0, 3).join(', '))}`;
-                if (server.tools.length > 3) {
-                    content += chalk.gray(` +${server.tools.length - 3} more`);
-                }
-                content += '\n';
-            } else if (server.status === 'connected') {
-                content += `   ${chalk.gray(messages.noTools)}\n`;
-            }
-
-            if (server.error) {
-                content += `   ${chalk.gray('Error:')} ${chalk.red(server.error)}\n`;
-            }
-
-            content += '\n';
+            hasContent = true;
         }
 
-        const mcpBox = boxen(
-            content.trim(),
-            {
-                title: messages.mcpTitle,
-                titleAlignment: 'center',
-                padding: 1,
-                margin: { top: 1, bottom: 1, left: 2, right: 2 },
-                borderStyle: 'round',
-                borderColor: 'green'
-            }
-        );
+        // 显示MCP服务信息（如果有）
+        if (detectionResult.hasMcpServices && detectionResult.mcpServers.length > 0) {
+            if (hasContent) content += '\n';
+            content += chalk.green('● ') + chalk.white.bold('MCP Services') + '\n';
+            
+            detectionResult.mcpServers.forEach(server => {
+                const statusIcon = this.getStatusIcon(server.status);
+                const statusColor = this.getStatusColor(server.status);
+                
+                content += `  ${statusIcon} ${chalk.white(server.name)}`;
+                
+                // 显示类型和状态
+                if (server.isBuiltIn) {
+                    content += ` ${chalk.gray('(Built-in)')}`;
+                } else {
+                    content += ` ${chalk.gray(`(${server.type.toUpperCase()})`)}`;
+                }
+                
+                content += ` - ${statusColor(this.getStatusText(server.status))}`;
+                
+                // 显示工具数量
+                if (server.tools && server.tools.length > 0) {
+                    content += ` ${chalk.cyan(`[${server.tools.length} tools]`)}`;
+                }
+                
+                content += '\n';
+            });
+            hasContent = true;
+        }
 
-        console.log(mcpBox);
+        // 显示LSP服务信息（如果有）
+        if (detectionResult.hasLspServices && detectionResult.lspServers.length > 0) {
+            if (hasContent) content += '\n';
+            content += chalk.blue('● ') + chalk.white.bold('Language Servers') + '\n';
+            
+            detectionResult.lspServers.forEach(server => {
+                const statusIcon = this.getLspStatusIcon(server.status);
+                const statusColor = this.getLspStatusColor(server.status);
+                
+                content += `  ${statusIcon} ${chalk.white(server.name)}`;
+                
+                // 显示类型
+                if (server.isBuiltIn) {
+                    content += ` ${chalk.gray('(Built-in)')}`;
+                } else {
+                    content += ` ${chalk.gray('(External)')}`;
+                }
+                
+                content += ` - ${statusColor(this.getLspStatusText(server.status))}`;
+                content += '\n';
+            });
+            hasContent = true;
+        }
+
+        // 显示整合的系统状态框
+        if (hasContent) {
+            const systemBox = boxen(
+                content.trim(),
+                {
+                    title: chalk.white.bold('System Status'),
+                    titleAlignment: 'center',
+                    padding: { top: 1, bottom: 1, left: 2, right: 2 },
+                    margin: { top: 1, bottom: 1, left: 2, right: 2 },
+                    borderStyle: 'round',
+                    borderColor: 'cyan'
+                }
+            );
+
+            console.log(systemBox);
+        }
     }
+
+
 
     private async detectMcpServers(mcpServers: Record<string, any>): Promise<McpServerInfo[]> {
         const servers: McpServerInfo[] = [];
@@ -253,6 +277,112 @@ export class SystemDetector {
         }
 
         return servers;
+    }
+
+    private async detectLspServers(lspServers: Record<string, any>): Promise<LspServerInfo[]> {
+        const servers: LspServerInfo[] = [];
+
+        for (const [name, config] of Object.entries(lspServers)) {
+            const serverInfo: LspServerInfo = {
+                name,
+                command: config.command,
+                args: config.args || [],
+                status: 'enabled'
+            };
+
+            // 检查是否为内置服务
+            const builtInServices = StorageService.getBuiltInLspServices();
+            if (builtInServices[name]) {
+                serverInfo.isBuiltIn = true;
+            }
+
+            // 检查是否被禁用
+            if (config.disabled === true) {
+                serverInfo.status = 'disabled';
+                servers.push(serverInfo);
+                continue;
+            }
+
+            // 检查命令是否存在（简单检测）
+            try {
+                await this.checkLspServerAvailability(serverInfo);
+                servers.push(serverInfo);
+            } catch (error) {
+                serverInfo.status = 'error';
+                serverInfo.error = error instanceof Error ? error.message : 'Unknown error';
+                servers.push(serverInfo);
+            }
+        }
+
+        return servers;
+    }
+
+    private async checkLspServerAvailability(serverInfo: LspServerInfo): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const { spawn } = require('child_process');
+            
+            if (!serverInfo.command) {
+                reject(new Error('No command specified'));
+                return;
+            }
+
+            // 尝试启动LSP服务器来检查可用性
+            const child = spawn(serverInfo.command, ['--help'], {
+                stdio: 'pipe',
+                timeout: 3000 // 3秒超时
+            });
+
+            let resolved = false;
+
+            const cleanup = () => {
+                if (!resolved) {
+                    resolved = true;
+                    try {
+                        child.kill();
+                    } catch (error) {
+                        // 忽略清理错误
+                    }
+                }
+            };
+
+            child.on('spawn', () => {
+                if (!resolved) {
+                    resolved = true;
+                    cleanup();
+                    resolve();
+                }
+            });
+
+            child.on('error', (error: Error) => {
+                if (!resolved) {
+                    resolved = true;
+                    cleanup();
+                    if (error.message.includes('ENOENT')) {
+                        reject(new Error(`Command not found: ${serverInfo.command}`));
+                    } else {
+                        reject(error);
+                    }
+                }
+            });
+
+            child.on('exit', (code: number | null) => {
+                if (!resolved) {
+                    resolved = true;
+                    cleanup();
+                    // 任何退出码都认为是可用的，因为我们只是测试命令是否存在
+                    resolve();
+                }
+            });
+
+            // 超时处理
+            setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    cleanup();
+                    reject(new Error(`Timeout checking ${serverInfo.command}`));
+                }
+            }, 3000);
+        });
     }
 
     private async connectToBuiltInServer(serverInfo: McpServerInfo): Promise<void> {
@@ -654,6 +784,53 @@ export class SystemDetector {
             } catch (error) {
                 throw new Error(`Failed to execute external MCP tool ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
+        }
+    }
+
+    private getLspStatusIcon(status: LspServerInfo['status']): string {
+        switch (status) {
+            case 'enabled':
+                return chalk.green('●');
+            case 'disabled':
+                return chalk.gray('●');
+            case 'not_found':
+                return chalk.yellow('●');
+            case 'error':
+                return chalk.red('●');
+            default:
+                return chalk.gray('●');
+        }
+    }
+
+    private getLspStatusColor(status: LspServerInfo['status']): (text: string) => string {
+        switch (status) {
+            case 'enabled':
+                return chalk.green;
+            case 'disabled':
+                return chalk.gray;
+            case 'not_found':
+                return chalk.yellow;
+            case 'error':
+                return chalk.red;
+            default:
+                return chalk.gray;
+        }
+    }
+
+    private getLspStatusText(status: LspServerInfo['status']): string {
+        const messages = languageService.getMessages().systemDetector;
+
+        switch (status) {
+            case 'enabled':
+                return messages.lspEnabled;
+            case 'disabled':
+                return messages.lspDisabled;
+            case 'not_found':
+                return messages.lspNotFound;
+            case 'error':
+                return messages.lspError;
+            default:
+                return 'Unknown';
         }
     }
 

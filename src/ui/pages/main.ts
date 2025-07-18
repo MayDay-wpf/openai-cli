@@ -233,29 +233,29 @@ export class MainPage {
     const currentDir = process.cwd();
     const apiConfig = StorageService.getApiConfig();
 
-    // 构建配置信息显示文本
-    const configInfo = main.welcomeBox.configInfo
-      .replace('{currentDir}', currentDir)
-      .replace('{baseUrl}', apiConfig.baseUrl || 'unknown')
-      .replace('{apiKey}', apiConfig.apiKey ? StringUtils.maskApiKey(apiConfig.apiKey) : 'unknown');
+    // 简化配置信息显示
+    const configLines = [
+      `${chalk.gray('Directory:')} ${chalk.white(currentDir)}`,
+      `${chalk.gray('API URL:')} ${chalk.white(apiConfig.baseUrl || 'Not configured')}`,
+      `${chalk.gray('API Key:')} ${chalk.white(apiConfig.apiKey ? StringUtils.maskApiKey(apiConfig.apiKey) : 'Not configured')}`
+    ];
 
-    // 欢迎方框
+    // 欢迎方框 - 更紧凑的设计
     const welcomeBox = boxen(
-      chalk.hex('#FF6B6B').bold(main.title + '\n\n') +
+      chalk.hex('#FF6B6B').bold(main.title) + '\n' +
       chalk.hex('#4ECDC4').italic(main.subtitle) + '\n\n' +
-      chalk.hex('#45B7D1')('─'.repeat(50)) + '\n' +
-      configInfo,
+      configLines.join('\n'),
       {
-        padding: 1,
-        margin: 1,
-        borderStyle: 'double',
+        padding: { top: 1, bottom: 1, left: 2, right: 2 },
+        margin: { top: 1, bottom: 0, left: 2, right: 2 },
+        borderStyle: 'round',
         borderColor: 'magenta',
-        title: main.welcomeBox.title,
+        title: chalk.white.bold('Welcome'),
         titleAlignment: 'center'
       }
     );
 
-    process.stdout.write(welcomeBox + '\n\n');
+    process.stdout.write(welcomeBox + '\n');
   }
 
   async show(): Promise<void> {
