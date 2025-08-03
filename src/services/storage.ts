@@ -34,16 +34,7 @@ export interface McpConfig {
   mcpServers: Record<string, McpServer>;
 }
 
-export interface LspServer {
-  disabled?: boolean;
-  command: string;
-  args?: string[];
-  [key: string]: any; // 允许额外的配置项
-}
 
-export interface LspConfig {
-  lsp: Record<string, LspServer>;
-}
 
 /**
  * 配置存储服务
@@ -151,11 +142,9 @@ export class StorageService {
         mcpConfig: {
           mcpServers: {}
         },
-        lspConfig: {
-          lsp: {}
-        }
+
       };
-      // 确保内置MCP服务添加到默认配置中，但LSP服务保持空配置
+      // 确保内置MCP服务添加到默认配置中
       const finalConfig = {
         ...defaultConfig,
         mcpConfig: StorageService.ensureBuiltInMcpServices(defaultConfig.mcpConfig)
@@ -414,7 +403,7 @@ export class StorageService {
     delete config.mcpFunctionConfirmation;
     delete config.maxToolCalls;
     delete config.terminalSensitiveWords;
-    delete config.lspConfig;
+
     // 保留语言设置
     // delete config.language;
     StorageService.writeConfig(config);
@@ -598,130 +587,5 @@ export class StorageService {
     StorageService.saveMcpFunctionConfirmationConfig(config);
   }
 
-  /**
-   * 获取LSP配置
-   */
-  static getLspConfig(): LspConfig {
-    const config = StorageService.readConfig();
-    let lspConfig = config.lspConfig || { lsp: {} };
 
-    // 不再强制确保系统自带的LSP服务存在，允许用户删除全部服务
-    return lspConfig;
-  }
-
-
-
-  /**
-   * 保存LSP配置
-   */
-  static saveLspConfig(lspConfig: LspConfig): void {
-    const config = StorageService.readConfig();
-    // 直接保存用户配置，不再强制添加系统自带的服务
-    config.lspConfig = lspConfig;
-    StorageService.writeConfig(config);
-  }
-
-  /**
-   * 获取LSP配置的JSON字符串（用于编辑）
-   */
-  static getLspConfigJson(): string {
-    const lspConfig = StorageService.getLspConfig();
-    return JSON.stringify(lspConfig, null, 2);
-  }
-
-  /**
-   * 从JSON字符串保存LSP配置
-   */
-  static saveLspConfigFromJson(jsonString: string): void {
-    try {
-      const lspConfig = JSON.parse(jsonString) as LspConfig;
-      StorageService.saveLspConfig(lspConfig);
-    } catch (error) {
-      throw new Error('Invalid JSON format for LSP configuration');
-    }
-  }
-
-  /**
-   * 获取系统内置LSP服务列表（仅供参考，不强制安装）
-   * 注意：LSP服务现在允许用户完全删除，不会强制恢复
-   */
-  static getBuiltInLspServices(): Record<string, LspServer> {
-    return {
-      'typescript': {
-        disabled: false,
-        command: 'typescript-language-server',
-        args: ['--stdio']
-      },
-      'javascript': {
-        disabled: false,
-        command: 'typescript-language-server',
-        args: ['--stdio']
-      }
-    };
-  }
-
-  /**
-   * 验证LSP配置JSON
-   */
-  static validateLspConfigJson(lspConfigJson: string): {
-    isValid: boolean;
-    error?: string;
-    parsedConfig?: LspConfig;
-  } {
-    try {
-      const parsedConfig = JSON.parse(lspConfigJson) as LspConfig;
-
-      // 验证基本结构 - 允许空的lsp对象
-      if (!parsedConfig.lsp || typeof parsedConfig.lsp !== 'object') {
-        const messages = getCurrentMessages('en');
-        return {
-          isValid: false,
-          error: 'LSP configuration must have an "lsp" object'
-        };
-      }
-
-      // 如果lsp对象为空，那也是有效的配置（用户删除了所有LSP服务）
-      if (Object.keys(parsedConfig.lsp).length === 0) {
-        return {
-          isValid: true,
-          parsedConfig
-        };
-      }
-
-      // 验证每个LSP服务配置
-      for (const [serverName, serverConfig] of Object.entries(parsedConfig.lsp)) {
-        if (!serverConfig.command || typeof serverConfig.command !== 'string') {
-          return {
-            isValid: false,
-            error: `LSP server "${serverName}" must have a valid "command" string`
-          };
-        }
-
-        if (serverConfig.args && !Array.isArray(serverConfig.args)) {
-          return {
-            isValid: false,
-            error: `LSP server "${serverName}" args must be an array if provided`
-          };
-        }
-
-        if (serverConfig.disabled !== undefined && typeof serverConfig.disabled !== 'boolean') {
-          return {
-            isValid: false,
-            error: `LSP server "${serverName}" disabled flag must be a boolean if provided`
-          };
-        }
-      }
-
-      return {
-        isValid: true,
-        parsedConfig
-      };
-    } catch (error) {
-      const messages = getCurrentMessages('en');
-      return {
-        isValid: false,
-        error: 'Invalid JSON format'
-      };
-    }
-  }
 } 

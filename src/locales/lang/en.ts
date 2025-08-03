@@ -365,7 +365,7 @@ export const en: Messages = {
       mcpConfig: 'Edit MCP Config',
       mcpFunctionConfirmation: 'Set MCP Function Confirmation',
       maxToolCalls: 'Set Max Tool Calls',
-      lspConfig: 'Edit LSP Config',
+
       viewConfig: 'View Current Config',
       resetConfig: 'Reset All Config',
       terminalSensitiveWords: 'Terminal Sensitive Words',
@@ -381,7 +381,7 @@ export const en: Messages = {
       mcpConfig: 'Configure external MCP (Model-Context-Protocol) services.',
       mcpFunctionConfirmation: 'Set which MCP functions require manual confirmation before execution.',
       maxToolCalls: 'Set the maximum number of tool calls allowed in a single conversation turn.',
-      lspConfig: 'Configure Language Server Protocol (LSP) services for enhanced code intelligence.',
+
       viewConfig: 'View all current configuration values.',
       resetConfig: 'Reset all settings to their default values.',
       terminalSensitiveWords: 'Configure the list of sensitive words for terminal execution, with wildcard support.',
@@ -406,8 +406,7 @@ export const en: Messages = {
       mcpConfigPlaceholder: '{\n  "mcpServers": {\n    \n  }\n}',
       mcpFunctionConfirmationPrompt: 'Select MCP functions that require manual confirmation',
       confirmMcpFunctionConfirmation: 'Enable MCP function manual confirmation',
-      lspConfigInput: 'Please edit the LSP services configuration (JSON)',
-              lspConfigPlaceholder: '{\n  "lsp": {\n  }\n}',
+
       confirmReset: 'Are you sure you want to reset all configurations? This action cannot be undone',
       terminalSensitiveWordsInput: 'Please edit the terminal sensitive words list',
       terminalSensitiveWordsPlaceholder: 'rm -rf\nmv\ncp\ndd'
@@ -432,8 +431,7 @@ export const en: Messages = {
       mcpFunctionConfirmationSaved: 'MCP function confirmation settings saved',
       noMcpFunctionsFound: 'No MCP functions found',
       mcpFunctionConfirmationInstructions: 'Instructions: [Space]toggle  [a]select all  [i]invert selection  [Enter]save',
-      lspConfigEditorPrompt: 'Press Enter to open JSON editor. You can configure LSP servers or leave the "lsp" object empty to disable all LSP services.',
-      lspConfigUpdated: 'LSP configuration updated successfully',
+
       terminalSensitiveWordsEditorPrompt: 'One sensitive word per line, supports * wildcard',
       commandExecuting: 'Command is executing'
     },
@@ -447,7 +445,7 @@ export const en: Messages = {
       role: 'System Role',
       mcpConfig: 'MCP Services Config',
       mcpFunctionConfirmation: 'MCP Function Confirmation',
-      lspConfig: 'LSP Services Config',
+
       terminalSensitiveWords: 'Terminal Sensitive Words',
       status: 'Status',
       configured: 'Configured',
@@ -554,17 +552,14 @@ export const en: Messages = {
     checking: 'Detecting system configuration...',
     roleTitle: 'System Role Settings',
     mcpTitle: 'MCP Tool Services',
-    lspTitle: 'LSP Language Services',
+
     noRole: 'No system role set',
     noMcpServices: 'No MCP services configured',
     mcpConnecting: 'Connecting to MCP services...',
     mcpConnected: 'Connected',
     mcpFailed: 'Connection failed',
     mcpNotFound: 'Service not found',
-    lspEnabled: 'Enabled',
-    lspDisabled: 'Disabled',
-    lspNotFound: 'Not Found',
-    lspError: 'Error',
+
     toolsFound: 'Available tools',
     noTools: 'No tools available',
     serverStatus: 'Server status',
@@ -573,9 +568,9 @@ export const en: Messages = {
     progress: {
       detectingRole: 'Detecting system role configuration',
       detectingMcp: 'Detecting MCP service configuration',
-      detectingLsp: 'Detecting LSP service configuration',
+
       connectingMcp: 'Connecting to MCP servers',
-      checkingLsp: 'Checking LSP servers availability',
+
       fetchingTools: 'Fetching available tools',
       completed: 'System detection completed'
     },

@@ -299,7 +299,6 @@ export interface Messages {
       mcpConfig: string;
       mcpFunctionConfirmation: string;
       maxToolCalls: string;
-      lspConfig: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -315,7 +314,6 @@ export interface Messages {
       mcpConfig: string;
       mcpFunctionConfirmation: string;
       maxToolCalls: string;
-      lspConfig: string;
       viewConfig: string;
       resetConfig: string;
       back: string;
@@ -340,8 +338,6 @@ export interface Messages {
       mcpConfigPlaceholder: string;
       mcpFunctionConfirmationPrompt: string;
       confirmMcpFunctionConfirmation: string;
-      lspConfigInput: string;
-      lspConfigPlaceholder: string;
       confirmReset: string;
       terminalSensitiveWordsInput: string;
       terminalSensitiveWordsPlaceholder: string;
@@ -366,8 +362,7 @@ export interface Messages {
       mcpFunctionConfirmationSaved: string;
       noMcpFunctionsFound: string;
       mcpFunctionConfirmationInstructions: string;
-      lspConfigEditorPrompt: string;
-      lspConfigUpdated: string;
+
       terminalSensitiveWordsEditorPrompt: string;
       commandExecuting: string;
     };
@@ -381,7 +376,7 @@ export interface Messages {
       role: string;
       mcpConfig: string;
       mcpFunctionConfirmation: string;
-      lspConfig: string;
+
       terminalSensitiveWords: string;
       status: string;
       configured: string;
@@ -488,17 +483,14 @@ export interface Messages {
     checking: string;
     roleTitle: string;
     mcpTitle: string;
-    lspTitle: string;
+
     noRole: string;
     noMcpServices: string;
     mcpConnecting: string;
     mcpConnected: string;
     mcpFailed: string;
     mcpNotFound: string;
-    lspEnabled: string;
-    lspDisabled: string;
-    lspNotFound: string;
-    lspError: string;
+
     toolsFound: string;
     noTools: string;
     serverStatus: string;
@@ -507,9 +499,9 @@ export interface Messages {
     progress: {
       detectingRole: string;
       detectingMcp: string;
-      detectingLsp: string;
+
       connectingMcp: string;
-      checkingLsp: string;
+
       fetchingTools: string;
       completed: string;
     };

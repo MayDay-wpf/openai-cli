@@ -365,7 +365,7 @@ export const zh: Messages = {
       mcpConfig: '配置MCP服务',
       mcpFunctionConfirmation: '配置MCP函数确认',
       maxToolCalls: '设置最大工具调用次数',
-      lspConfig: '配置LSP服务',
+
       viewConfig: '查看当前配置',
       resetConfig: '重置所有配置',
       terminalSensitiveWords: '终端敏感词拦截',
@@ -381,7 +381,7 @@ export const zh: Messages = {
       mcpConfig: '配置外部的MCP (Model-Context-Protocol) 服务。',
       mcpFunctionConfirmation: '设置哪些MCP函数在执行前需要手动确认。',
       maxToolCalls: '设置在单轮对话中允许的最大工具调用次数。',
-      lspConfig: '配置语言服务器协议 (LSP) 服务以增强代码智能功能。',
+
       viewConfig: '查看所有当前的配置值。',
       resetConfig: '将所有设置重置为默认值。',
       terminalSensitiveWords: '配置终端执行的敏感词列表，支持通配符。',
@@ -406,8 +406,7 @@ export const zh: Messages = {
       mcpConfigPlaceholder: '{\n  "mcpServers": {\n   \n  }\n}',
       mcpFunctionConfirmationPrompt: '选择需要手动确认的 MCP 函数',
       confirmMcpFunctionConfirmation: '是否启用MCP函数手动确认',
-      lspConfigInput: '请编辑LSP服务配置 (JSON)',
-              lspConfigPlaceholder: '{\n  "lsp": {\n  }\n}',
+
       confirmReset: '确定要重置所有配置吗？此操作不可撤销',
       terminalSensitiveWordsInput: '请编辑终端敏感词列表',
       terminalSensitiveWordsPlaceholder: 'rm -rf\nmv\ncp\ndd'
@@ -432,8 +431,7 @@ export const zh: Messages = {
       mcpFunctionConfirmationSaved: 'MCP函数确认设置已保存',
       noMcpFunctionsFound: '未找到可用的MCP函数',
       mcpFunctionConfirmationInstructions: '操作说明: [空格]选中/取消  [a]全选  [i]全反选  [Enter]保存',
-      lspConfigEditorPrompt: '按回车键打开JSON编辑器。您可以配置LSP服务器，或者将"lsp"对象留空以禁用所有LSP服务。',
-      lspConfigUpdated: 'LSP配置已成功更新',
+
       terminalSensitiveWordsEditorPrompt: '每行一个敏感词，支持 * 通配符',
       commandExecuting: '命令执行中'
     },
@@ -447,7 +445,7 @@ export const zh: Messages = {
       role: '系统角色',
       mcpConfig: 'MCP服务配置',
       mcpFunctionConfirmation: 'MCP函数确认',
-      lspConfig: 'LSP服务配置',
+
       terminalSensitiveWords: '终端敏感词',
       status: '状态',
       configured: '已配置',
@@ -554,17 +552,14 @@ export const zh: Messages = {
     checking: '正在检测系统配置...',
     roleTitle: '系统角色设置',
     mcpTitle: 'MCP 工具服务',
-    lspTitle: 'LSP 语言服务',
+
     noRole: '未设置系统角色',
     noMcpServices: '未配置MCP服务',
     mcpConnecting: '正在连接MCP服务...',
     mcpConnected: '已连接',
     mcpFailed: '连接失败',
     mcpNotFound: '服务未找到',
-    lspEnabled: '已启用',
-    lspDisabled: '已禁用',
-    lspNotFound: '未找到',
-    lspError: '错误',
+
     toolsFound: '可用工具',
     noTools: '无可用工具',
     serverStatus: '服务器状态',
@@ -573,9 +568,9 @@ export const zh: Messages = {
     progress: {
       detectingRole: '检测系统角色配置',
       detectingMcp: '检测MCP服务配置',
-      detectingLsp: '检测LSP服务配置',
+
       connectingMcp: '连接到MCP服务器',
-      checkingLsp: '检查LSP服务器可用性',
+
       fetchingTools: '获取可用工具列表',
       completed: '系统检测完成'
     },

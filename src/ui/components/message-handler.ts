@@ -396,7 +396,7 @@ If it has been completed, remember to call the 'update_todos' tool to update the
                         }
                         const errorMsg = `${messages.main.status.connectionError}: ${error.message}`;
                         process.stdout.write(chalk.red(errorMsg) + '\n\n');
-                        console.log(chalk.gray(JSON.stringify(chatMessages, null, 2)));
+                        //console.log(chalk.gray(JSON.stringify(chatMessages, null, 2)));
                         continueConversation = false; // Stop loop on error
                     }
                 });

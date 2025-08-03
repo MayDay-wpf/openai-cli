@@ -3,7 +3,7 @@ import { createPatch } from 'diff';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CheckpointService } from '../../services/checkpoint';
-import { LspDetector } from '../../services/lsp-detector';
+
 import { StorageService } from '../../services/storage';
 import { getLanguageForFile } from '../../utils/file-types';
 import { BaseMCPService } from '../base-service';
@@ -307,15 +307,10 @@ export class FileSystemService extends BaseMCPService {
             // Calculate token count (rough estimation)
             const tokenCount = this.estimateTokenCount(finalContent);
 
-            // LSP 语法检查
-            const lspDetection = await LspDetector.detectLspForFile(targetPath);
-            const lspSuggestion = LspDetector.generateLspSuggestion(lspDetection);
-
             // 打印文件读取信息到控制台
             console.log(`📃 Read file: ${targetPath} (${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines})`);
-            // LSP检测器已经在内部打印了详细的语法检查结果
 
-            const message = `✅ **File read successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Lines:** ${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines}\n**Tokens:** ~${tokenCount}\n**Modified:** ${stats.mtime.toLocaleString()}\n\n${isPartial ? '*Partial content - use startLine/endLine to read different sections.*' : '*Complete file content loaded.*'}${lspSuggestion}`;
+            const message = `✅ **File read successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Lines:** ${isPartial ? `${lineRange!.start}-${lineRange!.end} of ${totalLines}` : totalLines}\n**Tokens:** ~${tokenCount}\n**Modified:** ${stats.mtime.toLocaleString()}\n\n${isPartial ? '*Partial content - use startLine/endLine to read different sections.*' : '*Complete file content loaded.*'}`;
             const response = `${message}\n\n---\n\n${finalContent}`;
 
             return this.createSuccessResponse(request.id, response);
@@ -547,17 +542,12 @@ export class FileSystemService extends BaseMCPService {
             fs.writeFileSync(targetPath, content, encoding as BufferEncoding);
             const stats = fs.statSync(targetPath);
 
-            // LSP 语法检查 - 在文件创建后进行
-            const lspDetection = await LspDetector.detectLspForFile(targetPath);
-            const lspSuggestion = LspDetector.generateLspSuggestion(lspDetection);
-            
             // 打印文件创建信息到控制台
             console.log(`📄 Create file: ${targetPath} (${content.length} chars)`);
-            // LSP检测器已经在内部打印了详细的语法检查结果
 
             const diff = createPatch(targetPath, '', content);
-            
-            const resultMessage = `✅ **File created successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Content:** ${content.length > 0 ? `${content.length} characters` : 'Empty file'}\n${parentCreated ? '**Parent directories:** Created automatically\n' : ''}\n*File is ready for use.*${lspSuggestion}`;
+
+            const resultMessage = `✅ **File created successfully**\n\n**File:** \`${targetPath}\`\n**Size:** ${this.formatFileSize(stats.size)}\n**Content:** ${content.length > 0 ? `${content.length} characters` : 'Empty file'}\n${parentCreated ? '**Parent directories:** Created automatically\n' : ''}\n*File is ready for use.*`;
 
             // Note: 如果不是手动确认,则打印diff到控制台
             const needsConfirmation = StorageService.isFunctionConfirmationRequired('file-system_create_file');
@@ -748,13 +738,8 @@ export class FileSystemService extends BaseMCPService {
             const contextLines = 30;
             const newContentLineCount = newContentLines.length;
 
-            // LSP 语法检查 - 在文件编辑后进行
-            const lspDetection = await LspDetector.detectLspForFile(targetPath);
-            const lspSuggestion = LspDetector.generateLspSuggestion(lspDetection);
-            
             // 打印文件编辑信息到控制台
             console.log(`✏️ Edit file: ${targetPath} (line ${params.startLine}-${params.startLine + newContentLineCount - 1})`);
-            // LSP检测器已经在内部打印了详细的语法检查结果
 
             // Calculate the display range
             const displayStartLine = Math.max(1, params.startLine - contextLines);
@@ -767,7 +752,7 @@ export class FileSystemService extends BaseMCPService {
                 .join('\n');
 
             const language = getLanguageForFile(targetPath);
-            
+
             const resultMessage = `✅ **File Edited: \`${targetPath}\`**
 
 AI has modified the file. Below is the code block surrounding the edit (lines ${params.startLine}-${params.startLine + newContentLineCount - 1}).
@@ -780,7 +765,7 @@ ${codeBlock}
 
 - If the edit is correct, reply: \`✔checked\`
 - If the edit is incorrect or contains syntax errors, use the \`edit_file\` tool to make corrections.
-- **Important tip: you can use the terminal tool 'execute_command' to run commands, such as 'node --check script.js' or the VSCode 'code' command to check for syntax errors.**${lspSuggestion}`;
+- **Important tip: you can use the terminal tool 'execute_command' to run commands, such as 'node --check script.js' or the VSCode 'code' command to check for syntax errors.**`;
 
             // Create a diff for only the changed portion, but with correct line numbers
             const originalSlice = originalContent.split('\n').slice(params.startLine - 1, params.endLine).join('\n');
