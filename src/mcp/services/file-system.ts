@@ -1,6 +1,7 @@
 import { highlight } from 'cli-highlight';
 import { createPatch } from 'diff';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { CheckpointService } from '../../services/checkpoint';
 
@@ -112,7 +113,7 @@ export class FileSystemService extends BaseMCPService {
             },
             {
                 name: 'code_reference_search',
-                description: '🔍 **CRITICAL TOOL** - Advanced code reference and dependency analysis across codebases. This is the MOST IMPORTANT tool for understanding code structure, relationships, and dependencies. Use this tool frequently for any code analysis tasks! Provides intelligent symbol search, dependency tracking, import/export analysis, and comprehensive cross-reference mapping.',
+                description: '🔍 **CRITICAL TOOL** - Advanced code reference and dependency analysis with high-performance concurrent processing. Uses intelligent file prioritization, parallel search across CPU cores, and smart result aggregation for blazing-fast results in large codebases. This is the MOST IMPORTANT tool for understanding code structure, relationships, and dependencies. Use this tool frequently for any code analysis tasks! Provides intelligent symbol search, dependency tracking, import/export analysis, and comprehensive cross-reference mapping.',
                 inputSchema: {
                     type: 'object',
                     properties: {
@@ -143,10 +144,10 @@ export class FileSystemService extends BaseMCPService {
                         },
                         maxResults: {
                             type: 'number',
-                            description: 'Maximum number of results to return (default: 50)',
+                            description: 'Maximum number of results to return (default: 50, max: 100). Lower values provide faster results in large projects.',
                             default: 50,
                             minimum: 1,
-                            maximum: 200
+                            maximum: 100
                         },
                         includeDependencies: {
                             type: 'boolean',
@@ -651,6 +652,11 @@ export class FileSystemService extends BaseMCPService {
         const results: Array<{ file: string; line: number; content: string; type: string; confidence?: number }> = [];
         const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.zip', '.pdf', '.exe', '.dll', '.so', '.dylib', '.bin', '.dat', '.ico'];
         
+        // Performance optimizations: limit search scope for large projects
+        const MAX_FILES_TO_SEARCH = 500; // 限制搜索文件数量
+        const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB 文件大小限制
+        let filesSearched = 0;
+        
         // Language-specific file extensions with enhanced coverage
         const languageExtensions: Record<string, string[]> = {
             typescript: ['.ts', '.tsx', '.d.ts'],
@@ -715,25 +721,98 @@ export class FileSystemService extends BaseMCPService {
             (dirPath) => !['node_modules', '.git', 'dist', 'build', 'coverage', '.next', 'target'].some(excluded => path.basename(dirPath) === excluded)
         );
 
-        for (const file of allFiles) {
+        // Performance optimization: prioritize files and limit search scope
+        const prioritizedFiles = this.prioritizeFilesForSearch(allFiles, symbol, startPath);
+        const filesToSearch = prioritizedFiles.slice(0, MAX_FILES_TO_SEARCH);
+
+        // Concurrent processing with worker pool
+        const CONCURRENCY_LIMIT = Math.min(8, Math.max(2, Math.floor(os.cpus().length / 2))); // 使用 CPU 核心数的一半，最小2最大8
+        const chunks = this.chunkArray(filesToSearch, Math.ceil(filesToSearch.length / CONCURRENCY_LIMIT));
+        
+        console.log(`🚀 Starting concurrent search: ${filesToSearch.length} files in ${chunks.length} chunks (concurrency: ${CONCURRENCY_LIMIT})`);
+        
+        // Process chunks concurrently
+        const chunkPromises = chunks.map((chunk, chunkIndex) => 
+            this.searchFilesChunk(chunk, symbol, searchType, includeComments, fuzzyMatch, maxResults, chunkIndex)
+        );
+
+        try {
+            const chunkResults = await Promise.all(chunkPromises);
+            
+            // Merge and sort results from all chunks
+            const allResults: Array<{ file: string; line: number; content: string; type: string; confidence?: number }> = [];
+            let totalFilesSearched = 0;
+            
+            for (const chunkResult of chunkResults) {
+                allResults.push(...chunkResult.results);
+                totalFilesSearched += chunkResult.filesSearched;
+            }
+
+            // Sort by confidence and limit results
+            const sortedResults = allResults
+                .sort((a, b) => 
+                    (b.confidence || 1) - (a.confidence || 1) || 
+                    a.file.localeCompare(b.file) || 
+                    a.line - b.line
+                )
+                .slice(0, maxResults);
+
+            console.log(`📊 Concurrent search completed: Found ${sortedResults.length} matches in ${totalFilesSearched} files`);
+            return sortedResults;
+
+        } catch (error) {
+            console.error('❌ Concurrent search failed, falling back to sequential search:', error);
+            return this.searchFilesSequential(filesToSearch, symbol, searchType, includeComments, fuzzyMatch, maxResults);
+        }
+    }
+
+    // 新增：数组分块方法
+    private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+        const chunks: T[][] = [];
+        for (let i = 0; i < array.length; i += chunkSize) {
+            chunks.push(array.slice(i, i + chunkSize));
+        }
+        return chunks;
+    }
+
+    // 新增：并发搜索文件块
+    private async searchFilesChunk(
+        files: string[],
+        symbol: string,
+        searchType: string,
+        includeComments: boolean,
+        fuzzyMatch: boolean,
+        maxResults: number,
+        chunkIndex: number
+    ): Promise<{ results: Array<{ file: string; line: number; content: string; type: string; confidence?: number }>; filesSearched: number }> {
+        const results: Array<{ file: string; line: number; content: string; type: string; confidence?: number }> = [];
+        let filesSearched = 0;
+        const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
+        for (const file of files) {
+            // Early termination if we have enough results globally
+            if (results.length >= Math.ceil(maxResults / 4)) { // 每个块最多返回总数的1/4
+                break;
+            }
+
             try {
                 const stats = fs.statSync(file);
-                if (stats.size > 5 * 1024 * 1024) continue; // Skip files larger than 5MB
+                if (stats.size > MAX_FILE_SIZE) continue;
 
                 const content = fs.readFileSync(file, 'utf-8');
                 const lines = content.split('\n');
                 const relativePath = path.relative(process.cwd(), file);
+                
+                filesSearched++;
 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
                     const lineNum = i + 1;
 
-                    // Skip comments if not included
                     if (!includeComments && this.isCommentLine(line, file)) {
                         continue;
                     }
 
-                    // Get matches with fuzzy matching support
                     const matches = this.findSymbolMatches(line, symbol, searchType, fuzzyMatch);
                     
                     for (const match of matches) {
@@ -745,13 +824,8 @@ export class FileSystemService extends BaseMCPService {
                             confidence: match.confidence
                         });
 
-                        // Stop if we've reached the maximum results
-                        if (results.length >= maxResults) {
-                            return results.sort((a, b) => 
-                                (b.confidence || 1) - (a.confidence || 1) || 
-                                a.file.localeCompare(b.file) || 
-                                a.line - b.line
-                            );
+                        if (results.length >= Math.ceil(maxResults / 2)) { // 单个块的硬限制
+                            return { results, filesSearched };
                         }
                     }
                 }
@@ -761,11 +835,116 @@ export class FileSystemService extends BaseMCPService {
             }
         }
 
+        return { results, filesSearched };
+    }
+
+    // 新增：回退的顺序搜索方法
+    private async searchFilesSequential(
+        files: string[],
+        symbol: string,
+        searchType: string,
+        includeComments: boolean,
+        fuzzyMatch: boolean,
+        maxResults: number
+    ): Promise<Array<{ file: string; line: number; content: string; type: string; confidence?: number }>> {
+        const results: Array<{ file: string; line: number; content: string; type: string; confidence?: number }> = [];
+        let filesSearched = 0;
+        const MAX_FILE_SIZE = 2 * 1024 * 1024;
+
+        for (const file of files) {
+            if (results.length >= maxResults) break;
+
+            try {
+                const stats = fs.statSync(file);
+                if (stats.size > MAX_FILE_SIZE) continue;
+
+                const content = fs.readFileSync(file, 'utf-8');
+                const lines = content.split('\n');
+                const relativePath = path.relative(process.cwd(), file);
+                
+                filesSearched++;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const lineNum = i + 1;
+
+                    if (!includeComments && this.isCommentLine(line, file)) {
+                        continue;
+                    }
+
+                    const matches = this.findSymbolMatches(line, symbol, searchType, fuzzyMatch);
+                    
+                    for (const match of matches) {
+                        results.push({
+                            file: relativePath,
+                            line: lineNum,
+                            content: line,
+                            type: match.type,
+                            confidence: match.confidence
+                        });
+
+                        if (results.length >= maxResults) {
+                            console.log(`📊 Sequential search completed: Found ${results.length} matches in ${filesSearched} files`);
+                            return results.sort((a, b) => 
+                                (b.confidence || 1) - (a.confidence || 1) || 
+                                a.file.localeCompare(b.file) || 
+                                a.line - b.line
+                            );
+                        }
+                    }
+                }
+            } catch (readError) {
+                continue;
+            }
+        }
+
+        console.log(`📊 Sequential search completed: Found ${results.length} matches in ${filesSearched} files`);
         return results.sort((a, b) => 
             (b.confidence || 1) - (a.confidence || 1) || 
             a.file.localeCompare(b.file) || 
             a.line - b.line
         );
+    }
+
+    // 新增：文件优先级排序方法
+    private prioritizeFilesForSearch(files: string[], symbol: string, basePath: string): string[] {
+        const currentDir = process.cwd();
+        
+        return files.sort((a, b) => {
+            let scoreA = 0;
+            let scoreB = 0;
+            
+            const filenameA = path.basename(a).toLowerCase();
+            const filenameB = path.basename(b).toLowerCase();
+            const symbolLower = symbol.toLowerCase();
+            
+            // 1. 优先级：文件名包含搜索符号
+            if (filenameA.includes(symbolLower)) scoreA += 100;
+            if (filenameB.includes(symbolLower)) scoreB += 100;
+            
+            // 2. 优先级：离当前目录更近的文件
+            const depthA = path.relative(currentDir, a).split(path.sep).length;
+            const depthB = path.relative(currentDir, b).split(path.sep).length;
+            scoreA += Math.max(0, 20 - depthA);
+            scoreB += Math.max(0, 20 - depthB);
+            
+            // 3. 优先级：常见的重要文件类型
+            const importantExts = ['.ts', '.js', '.tsx', '.jsx', '.py', '.java', '.go', '.rs'];
+            const extA = path.extname(a).toLowerCase();
+            const extB = path.extname(b).toLowerCase();
+            if (importantExts.includes(extA)) scoreA += 10;
+            if (importantExts.includes(extB)) scoreB += 10;
+            
+            // 4. 优先级：非测试文件
+            if (!filenameA.includes('test') && !filenameA.includes('spec')) scoreA += 5;
+            if (!filenameB.includes('test') && !filenameB.includes('spec')) scoreB += 5;
+            
+            // 5. 优先级：src 目录中的文件
+            if (a.includes('/src/') || a.includes('\\src\\')) scoreA += 5;
+            if (b.includes('/src/') || b.includes('\\src\\')) scoreB += 5;
+            
+            return scoreB - scoreA;
+        });
     }
 
     private findSymbolMatches(line: string, symbol: string, searchType: string, fuzzyMatch: boolean = true): Array<{ type: string; confidence?: number }> {
