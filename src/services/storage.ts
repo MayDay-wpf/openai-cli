@@ -27,6 +27,7 @@ export interface McpServer {
   command?: string;
   args?: string[];
   transport?: string;
+  env?: Record<string, string>; // 环境变量，用于需要鉴权的MCP服务
   [key: string]: any; // 允许额外的配置项
 }
 

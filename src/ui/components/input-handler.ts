@@ -230,7 +230,7 @@ export class InputHandler {
 
       // 确保每行都不会超过终端宽度，避免自动换行导致的显示问题
       const terminalWidth = process.stdout.columns || 80;
-      const maxLineWidth = terminalWidth - 4; // 留出一些边距
+      const maxLineWidth = Math.max(40, terminalWidth - 4); // 至少保留40个字符，留出一些边距
       const fullLine = prefix + displayText;
       
       // 使用 StringUtils 计算实际显示宽度（考虑ANSI颜色代码）
@@ -302,9 +302,12 @@ export class InputHandler {
    * 在保持颜色格式的情况下截断字符串
    */
   private truncateWithColor(str: string, maxWidth: number): string {
+    // 确保最小宽度，为省略号留出空间
+    const minWidth = Math.max(10, maxWidth - 3);
+    
     // 简单实现：移除末尾字符直到宽度合适
     let currentStr = str;
-    while (this.getDisplayWidthWithAnsi(currentStr) > maxWidth && currentStr.length > 0) {
+    while (this.getDisplayWidthWithAnsi(currentStr) > minWidth && currentStr.length > 0) {
       // 从后往前移除字符，但避免破坏ANSI序列
       const lastNonAnsiIndex = currentStr.search(/\x1b\[[0-9;]*m$/);
       if (lastNonAnsiIndex > 0) {

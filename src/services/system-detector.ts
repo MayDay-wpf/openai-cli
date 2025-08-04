@@ -212,9 +212,9 @@ export class SystemDetector {
                     serverInfo.args = config.args || [];
                 }
 
-                // 尝试连接外部MCP服务器
+                // 尝试连接外部MCP服务器，传递完整配置包括env
                 try {
-                    await this.connectToMcpServer(serverInfo);
+                    await this.connectToMcpServer(serverInfo, config);
                     servers.push(serverInfo);
                 } catch (error) {
                     serverInfo.status = 'failed';
@@ -292,7 +292,7 @@ export class SystemDetector {
         return 'unknown';
     }
 
-    private async connectToMcpServer(serverInfo: McpServerInfo): Promise<void> {
+    private async connectToMcpServer(serverInfo: McpServerInfo, config?: any): Promise<void> {
         const messages = languageService.getMessages().systemDetector;
 
         try {
@@ -304,6 +304,7 @@ export class SystemDetector {
             if (serverInfo.type === 'http' && serverInfo.url) {
                 try {
                     // 首先尝试HTTP连接
+                    // 对于HTTP连接，环境变量通常不直接传递，而是通过headers或认证方式
                     await client.connect({
                         type: "httpStream",
                         url: serverInfo.url,
@@ -330,11 +331,29 @@ export class SystemDetector {
                 });
                 serverInfo.actualTransport = 'sse';
             } else if (serverInfo.type === 'stdio' && serverInfo.command) {
+                // 准备环境变量 - 只对STDIO连接有效
+                const processEnv = process.env;
+                let connectionEnv: Record<string, string> = {};
+                
+                // 复制现有环境变量，过滤掉undefined值
+                Object.keys(processEnv).forEach(key => {
+                    const value = processEnv[key];
+                    if (value !== undefined) {
+                        connectionEnv[key] = value;
+                    }
+                });
+                
+                // 如果配置中有env，合并到环境变量中
+                if (config?.env && typeof config.env === 'object') {
+                    connectionEnv = { ...connectionEnv, ...config.env };
+                }
+
                 // STDIO连接
                 await client.connect({
                     type: "stdio",
                     command: serverInfo.command,
                     args: serverInfo.args || [],
+                    env: connectionEnv // 传递环境变量给子进程
                 });
                 serverInfo.actualTransport = 'stdio';
             } else {

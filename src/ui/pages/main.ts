@@ -418,34 +418,84 @@ export class MainPage {
       let cursorPosition = 0;
       let currentState: InputState | null = null;
       let isDestroyed = false;
+      let lastDisplayLines = 1;
+      let lastSuggestionLines = 0;
 
       // 显示初始提示符
-      process.stdout.write(chalk.cyan(this.currentMessages.main.prompt));
+      const promptText = chalk.cyan(this.currentMessages.main.prompt);
+      process.stdout.write(promptText);
 
-      // 绘制带光标的输入行
+      // 单行输入框渲染
       const redrawInputLine = () => {
         if (isDestroyed) return;
 
-        // 简单直接的重绘：清除当前行并重新输出
-        process.stdout.write('\r\x1B[2K');
-        process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + currentInput);
+        const terminalWidth = process.stdout.columns || 80;
+        
+        // 首先回到第一行的开头
+        process.stdout.write('\r');
+        if (lastDisplayLines > 1) {
+          // 向上移动到起始行
+          process.stdout.write(`\x1B[${lastDisplayLines - 1}A`);
+        }
+        
+        // 清除所有相关行
+        for (let i = 0; i < lastDisplayLines; i++) {
+          process.stdout.write('\x1B[2K'); // 清除当前行
+          if (i < lastDisplayLines - 1) {
+            process.stdout.write('\x1B[1B'); // 向下移动到下一行
+          }
+        }
+        
+        // 回到第一行开头
+        if (lastDisplayLines > 1) {
+          process.stdout.write(`\x1B[${lastDisplayLines - 1}A`);
+        }
+        process.stdout.write('\r');
+        
+        // 计算新内容的显示信息
+        const displayText = promptText + currentInput;
+        const displayWidth = StringUtils.getDisplayWidth(displayText);
+        const newDisplayLines = Math.ceil(displayWidth / terminalWidth) || 1;
+        
+        // 输出新内容
+        process.stdout.write(displayText);
+        
+        // 更新行数记录
+        lastDisplayLines = newDisplayLines;
 
-        // 重新定位光标
-        const promptWidth = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
-        const cursorOffset = StringUtils.getDisplayWidth(currentInput.slice(0, cursorPosition));
-        process.stdout.write(`\x1B[${promptWidth + cursorOffset + 1}G`);
+        // 计算并设置光标位置
+        const promptLength = StringUtils.getDisplayWidth(this.currentMessages.main.prompt);
+        const inputToCursor = currentInput.substring(0, cursorPosition);
+        const cursorOffset = StringUtils.getDisplayWidth(inputToCursor);
+        const totalCursorPos = promptLength + cursorOffset;
+        
+        const targetLine = Math.floor(totalCursorPos / terminalWidth);
+        const targetCol = totalCursorPos % terminalWidth;
+        
+        // 从当前位置（内容末尾）移动到目标位置
+        const currentEndLine = newDisplayLines - 1;
+        if (targetLine < currentEndLine) {
+          // 需要向上移动
+          process.stdout.write(`\x1B[${currentEndLine - targetLine}A`);
+        }
+        
+        // 设置到正确的列位置
+        process.stdout.write(`\x1B[${targetCol + 1}G`);
       };
 
       // 显示建议列表
       const showSuggestions = (state: InputState) => {
         if (!state.showingSuggestions || state.suggestions.length === 0 || isDestroyed) return;
 
-        // 直接在当前行下方输出建议，不使用光标保存恢复
         const title = this.inputHandler.getSuggestionTitle(state.suggestionsType);
         const renderedSuggestions = this.inputHandler.renderSuggestions(
           state.suggestions,
           state.selectedIndex
         );
+
+        // 计算建议列表需要的行数
+        let suggestionLines = renderedSuggestions.length;
+        if (title) suggestionLines += 1;
 
         // 输出建议列表
         process.stdout.write('\n');
@@ -456,9 +506,11 @@ export class MainPage {
           process.stdout.write(suggestion + '\n');
         });
 
+        // 更新建议行数追踪
+        lastSuggestionLines = suggestionLines + 1; // +1 是因为开头的 \n
+
         // 向上移动回输入行
-        const totalLines = 1 + (title ? 1 : 0) + renderedSuggestions.length;
-        process.stdout.write(`\x1B[${totalLines}A`);
+        process.stdout.write(`\x1B[${lastSuggestionLines}A`);
         
         // 重绘输入行确保显示正确
         redrawInputLine();
@@ -466,26 +518,19 @@ export class MainPage {
 
       // 隐藏建议列表
       const hideSuggestions = () => {
-        if (isDestroyed) return;
+        if (isDestroyed || lastSuggestionLines === 0) return;
 
-        // 如果没有建议状态，直接返回
-        if (!currentState?.showingSuggestions || !currentState.suggestions?.length) {
-          return;
-        }
-
-        // 计算建议列表占用的行数
-        const title = this.inputHandler.getSuggestionTitle(currentState.suggestionsType);
-        const suggestionsCount = currentState.suggestions.length;
-        const totalLines = 1 + (title ? 1 : 0) + suggestionsCount;
-
-        // 向下移动到建议列表开始位置
-        process.stdout.write(`\x1B[${totalLines}B`);
-
+        // 向下移动到建议列表位置并清除
+        process.stdout.write(`\x1B[${lastSuggestionLines}B`);
+        
         // 向上清除每一行
-        for (let i = 0; i < totalLines; i++) {
+        for (let i = 0; i < lastSuggestionLines; i++) {
           process.stdout.write('\x1B[1A\x1B[2K'); // 向上一行并清除
         }
 
+        // 重置建议行数
+        lastSuggestionLines = 0;
+        
         // 重绘输入行
         redrawInputLine();
       };
@@ -511,50 +556,17 @@ export class MainPage {
         // 注意：不需要 else 分支，因为 hideSuggestions 已经重绘了输入行
       };
 
-      // 强制刷新输入行显示
-      const refreshInputLine = () => {
-        if (isDestroyed) return;
-        redrawInputLine();
-      };
-
       // 高效更新建议列表选中状态（避免完全重绘）
       const updateSuggestionSelection = (newIndex: number) => {
         if (!currentState?.showingSuggestions || isDestroyed) return;
         
         currentState.selectedIndex = newIndex;
         
-        // 只重新渲染建议列表，避免完全重绘
-        const title = this.inputHandler.getSuggestionTitle(currentState.suggestionsType);
-        const renderedSuggestions = this.inputHandler.renderSuggestions(
-          currentState.suggestions,
-          currentState.selectedIndex
-        );
-        
-        // 计算建议列表占用的行数
-        const totalLines = 1 + (title ? 1 : 0) + renderedSuggestions.length;
-        
-        // 向下移动到建议列表开始位置
-        process.stdout.write(`\x1B[${totalLines}B`);
-        
-        // 向上清除每一行
-        for (let i = 0; i < totalLines; i++) {
-          process.stdout.write('\x1B[1A\x1B[2K'); // 向上一行并清除
+        // 先隐藏当前建议，再显示新的
+        if (lastSuggestionLines > 0) {
+          hideSuggestions();
         }
-        
-        // 重新输出建议列表
-        process.stdout.write('\n');
-        if (title) {
-          process.stdout.write(title + '\n');
-        }
-        renderedSuggestions.forEach(suggestion => {
-          process.stdout.write(suggestion + '\n');
-        });
-        
-        // 向上移动回输入行
-        process.stdout.write(`\x1B[${totalLines}A`);
-        
-        // 重绘输入行确保显示正确
-        redrawInputLine();
+        showSuggestions(currentState);
       };
 
       // 清理函数
@@ -603,10 +615,8 @@ export class MainPage {
           if (keyCode === 3) {
             cleanup();
             process.stdout.write('\n');
-            // 检查是否需要导出历史记录
             const exitAction = await this.commandManager.handleExitWithHistoryCheck(this.messages);
             if (exitAction === 'cancel') {
-              // 用户取消退出，重新开始输入循环
               return;
             }
             resolve('/exit');
@@ -622,15 +632,11 @@ export class MainPage {
 
               if (selectedSuggestion.type === 'command') {
                 // 命令类型直接执行
-                // 先手动隐藏建议列表，确保清除干净
                 if (currentState.showingSuggestions) {
                   hideSuggestions();
                 }
-
-                // 清除整行并重新显示命令
                 process.stdout.write('\x1B[2K\x1B[0G');
                 process.stdout.write(chalk.cyan(this.currentMessages.main.prompt) + newInput + '\n');
-
                 cleanup();
                 resolve(newInput);
                 return;
@@ -639,46 +645,34 @@ export class MainPage {
                 if (currentState.showingSuggestions) {
                   hideSuggestions();
                 }
-
-                // 更新输入内容
                 currentInput = newInput;
                 cursorPosition = currentInput.length;
-
-                // 刷新输入行显示
                 redrawInputLine();
-
-                // 更新显示
                 await updateDisplay();
                 return;
               }
             } else if (currentInput.trim()) {
-              // 正常输入
+              // 发送内容
+              const finalInput = currentInput.trim();
               cleanup();
               process.stdout.write('\n');
-              resolve(currentInput.trim());
+              resolve(finalInput);
               return;
             } else {
-              // 空输入，什么都不做
               return;
             }
           }
 
           // Backspace 键
           if (keyCode === 127 || keyCode === 8) {
-            if (cursorPosition > 0) {
-              // 先隐藏建议列表（如果有的话）
+            if (currentInput.length > 0 && cursorPosition > 0) {
               if (currentState?.showingSuggestions) {
                 hideSuggestions();
               }
 
-              // 从光标前删除一个字符
               currentInput = currentInput.slice(0, cursorPosition - 1) + currentInput.slice(cursorPosition);
               cursorPosition--;
-
-              // 重新绘制输入行和光标
               redrawInputLine();
-
-              // 重新更新显示
               await updateDisplay();
             }
             return;
@@ -709,7 +703,6 @@ export class MainPage {
                   currentState.showingSuggestions = false;
                 }
                 cursorPosition--;
-                // 如果没有建议显示，手动重绘输入行
                 if (!currentState?.showingSuggestions) {
                   redrawInputLine();
                 }
@@ -722,7 +715,6 @@ export class MainPage {
                   currentState.showingSuggestions = false;
                 }
                 cursorPosition++;
-                // 如果没有建议显示，手动重绘输入行
                 if (!currentState?.showingSuggestions) {
                   redrawInputLine();
                 }
@@ -731,7 +723,7 @@ export class MainPage {
             }
           }
 
-          // ESC 键 - 隐藏建议列表
+          // ESC 键处理
           if (keyCode === 27 && key.length === 1) {
             if (currentState?.showingSuggestions) {
               hideSuggestions();
@@ -741,40 +733,32 @@ export class MainPage {
             return;
           }
 
-          // 普通字符（支持中文等多字节字符）
+          // 普通字符输入
           const isPrintable = (key.length === 1 && keyCode >= 32) || (key.length > 1 && !key.startsWith('\x1B'));
 
           if (isPrintable) {
             let textToInsert = key;
 
-            // 处理粘贴内容
+            // 处理粘贴内容 - 统一转换为单行
             if (key.includes('\n') || key.includes('\r') || key.length > 10) {
-              // 检测是否在文件输入模式（输入中包含@符号）
               const hasFileReference = currentInput.includes('@');
               
               if (hasFileReference) {
-                // 文件输入模式：保留换行符
                 textToInsert = StringUtils.processFileContentPaste(key);
               } else {
-                // 普通输入模式：移除换行符
-                textToInsert = StringUtils.processPastedText(key);
+                // 所有多行内容都转换为单行
+                textToInsert = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
               }
             }
 
             if (textToInsert) {
-              // 先隐藏建议列表（如果有的话）
               if (currentState?.showingSuggestions) {
                 hideSuggestions();
               }
 
-              // 在光标位置插入文本
               currentInput = currentInput.slice(0, cursorPosition) + textToInsert + currentInput.slice(cursorPosition);
               cursorPosition += textToInsert.length;
-
-              // 重新绘制输入行和光标
               redrawInputLine();
-
-              // 更新显示
               await updateDisplay();
             }
           }
