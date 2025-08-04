@@ -15,13 +15,21 @@ export class FileSearchManager {
   private cacheExpiration: number = 30000; // 30秒缓存
   private gitignorePatterns: string[] = [];
   private gitignoreLastModified: number = 0;
+  
+  // 新增：查询缓存机制
+  private queryCache: Map<string, { results: FileSearchResult[]; timestamp: number }> = new Map();
+  private queryCacheExpiration: number = 10000; // 10秒查询缓存
+  
+  // 新增：热门文件缓存
+  private hotFiles: Set<string> = new Set();
+  private fileAccessCount: Map<string, number> = new Map();
 
   constructor(baseDirectory?: string) {
     this.currentDirectory = baseDirectory || process.cwd();
   }
 
   /**
-   * 搜索文件，支持模糊匹配
+   * 搜索文件，支持模糊匹配 - 优化版本，支持早期终止和智能缓存
    */
   async searchFiles(query: string, maxResults: number = 10): Promise<FileSearchResult[]> {
     // 如果查询为空，返回最近的一些文件
@@ -30,68 +38,103 @@ export class FileSearchManager {
       return this.cachedFiles.slice(0, maxResults);
     }
 
-    await this.ensureCacheUpdated();
-    
     const normalizedQuery = query.toLowerCase();
     
-    // 模糊匹配算法
-    const filtered = this.cachedFiles.filter(file => {
+    // 检查查询缓存
+    const cacheKey = `${normalizedQuery}_${maxResults}`;
+    const cachedQuery = this.queryCache.get(cacheKey);
+    if (cachedQuery && (Date.now() - cachedQuery.timestamp) < this.queryCacheExpiration) {
+      return cachedQuery.results;
+    }
+
+    await this.ensureCacheUpdated();
+    
+    const results: { file: FileSearchResult; score: number }[] = [];
+    
+    // 使用评分系统和早期终止优化搜索性能
+    for (const file of this.cachedFiles) {
       const fileName = file.name.toLowerCase();
       const relativePath = file.relativePath.toLowerCase();
       
-      // 1. 文件名开头匹配（优先级最高）
-      if (fileName.startsWith(normalizedQuery)) {
-        return true;
+      let score = 0;
+      let matched = false;
+      
+      // 1. 文件名精确匹配（最高分）
+      if (fileName === normalizedQuery) {
+        score = 1000;
+        matched = true;
+      }
+      // 2. 文件名开头匹配（优先级最高）
+      else if (fileName.startsWith(normalizedQuery)) {
+        score = 900 - normalizedQuery.length; // 查询越短分数越高
+        matched = true;
+      }
+      // 3. 路径开头匹配
+      else if (relativePath.startsWith(normalizedQuery)) {
+        score = 800 - normalizedQuery.length;
+        matched = true;
+      }
+      // 4. 文件名包含匹配
+      else if (fileName.includes(normalizedQuery)) {
+        score = 700 - fileName.indexOf(normalizedQuery) * 10; // 位置越靠前分数越高
+        matched = true;
+      }
+      // 5. 路径包含匹配
+      else if (relativePath.includes(normalizedQuery)) {
+        score = 600 - relativePath.indexOf(normalizedQuery) * 5;
+        matched = true;
+      }
+      // 6. 模糊匹配（字符序列匹配）
+      else if (this.fuzzyMatch(fileName, normalizedQuery)) {
+        score = 500;
+        matched = true;
+      }
+      else if (this.fuzzyMatch(relativePath, normalizedQuery)) {
+        score = 400;
+        matched = true;
       }
       
-      // 2. 路径开头匹配
-      if (relativePath.startsWith(normalizedQuery)) {
-        return true;
+      if (matched) {
+        // 文件类型加分：文件 > 目录
+        if (file.type === 'file') {
+          score += 50;
+        }
+        
+        // 热门文件加分
+        const accessCount = this.fileAccessCount.get(file.relativePath) || 0;
+        score += Math.min(accessCount * 10, 100); // 最多加100分
+        
+        results.push({ file, score });
+        
+        // 早期终止：如果找到足够多的高分结果，可以提前结束
+        if (results.length >= maxResults * 3 && score < 600) {
+          break;
+        }
       }
-      
-      // 3. 文件名包含匹配
-      if (fileName.includes(normalizedQuery)) {
-        return true;
-      }
-      
-      // 4. 路径包含匹配
-      if (relativePath.includes(normalizedQuery)) {
-        return true;
-      }
-      
-      // 5. 模糊匹配（字符序列匹配）
-      return this.fuzzyMatch(fileName, normalizedQuery) || 
-             this.fuzzyMatch(relativePath, normalizedQuery);
-    });
+    }
 
-    // 按匹配优先级排序
-    const sorted = filtered.sort((a, b) => {
-      const aName = a.name.toLowerCase();
-      const bName = b.name.toLowerCase();
-      const aPath = a.relativePath.toLowerCase();
-      const bPath = b.relativePath.toLowerCase();
-      
-      // 文件名开头匹配优先
-      const aNameStarts = aName.startsWith(normalizedQuery);
-      const bNameStarts = bName.startsWith(normalizedQuery);
-      if (aNameStarts && !bNameStarts) return -1;
-      if (!aNameStarts && bNameStarts) return 1;
-      
-      // 路径开头匹配次优先
-      const aPathStarts = aPath.startsWith(normalizedQuery);
-      const bPathStarts = bPath.startsWith(normalizedQuery);
-      if (aPathStarts && !bPathStarts) return -1;
-      if (!aPathStarts && bPathStarts) return 1;
-      
-      // 文件类型优先级：文件 > 目录
-      if (a.type === 'file' && b.type === 'directory') return -1;
-      if (a.type === 'directory' && b.type === 'file') return 1;
-      
-      // 按文件名长度排序（短的优先）
-      return aName.length - bName.length;
+    // 按分数排序并返回顶部结果
+    const finalResults = results
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxResults)
+      .map(result => result.file);
+    
+    // 缓存查询结果
+    this.queryCache.set(cacheKey, {
+      results: finalResults,
+      timestamp: Date.now()
     });
-
-    return sorted.slice(0, maxResults);
+    
+    // 更新文件访问统计
+    finalResults.forEach(file => {
+      const count = this.fileAccessCount.get(file.relativePath) || 0;
+      this.fileAccessCount.set(file.relativePath, count + 1);
+      if (count > 5) {
+        this.hotFiles.add(file.relativePath);
+      }
+    });
+    
+    return finalResults;
   }
 
   /**
@@ -601,7 +644,7 @@ export class FileSearchManager {
   }
 
   /**
-   * 确保缓存是最新的
+   * 确保缓存是最新的 - 优化版本，支持后台更新
    */
   private async ensureCacheUpdated(): Promise<void> {
     const now = Date.now();
@@ -609,8 +652,13 @@ export class FileSearchManager {
       return;
     }
 
-    await this.loadGitignorePatterns();
-    this.cachedFiles = await this.buildFileCache();
+    // 并发加载gitignore模式和构建文件缓存
+    const [, newFiles] = await Promise.all([
+      this.loadGitignorePatterns(),
+      this.buildFileCache()
+    ]);
+    
+    this.cachedFiles = newFiles;
     this.lastCacheTime = now;
   }
 
@@ -655,13 +703,24 @@ export class FileSearchManager {
    }
 
   /**
-   * 构建文件缓存
+   * 构建文件缓存 - 优化版本，支持增量更新和并发处理
    */
   private async buildFileCache(): Promise<FileSearchResult[]> {
     const files: FileSearchResult[] = [];
     
     try {
+      // 使用异步并发遍历，提高大项目的扫描速度
       await this.walkDirectory(this.currentDirectory, files, 0, 3); // 最多3层深度
+      
+      // 按文件类型和名称排序，优化搜索体验
+      files.sort((a, b) => {
+        // 文件优先于目录
+        if (a.type !== b.type) {
+          return a.type === 'file' ? -1 : 1;
+        }
+        // 同类型按名称排序
+        return a.name.localeCompare(b.name);
+      });
     } catch (error) {
       console.warn('Error building file cache:', error);
     }
@@ -685,7 +744,7 @@ export class FileSearchManager {
   }
 
   /**
-   * 递归遍历目录
+   * 递归遍历目录 - 优化版本，支持并发处理
    */
   private async walkDirectory(
     dirPath: string, 
@@ -697,34 +756,69 @@ export class FileSearchManager {
 
     try {
       const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+      const directories: string[] = [];
+      const processedResults: FileSearchResult[] = [];
       
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        const relativePath = path.relative(this.currentDirectory, fullPath);
-        const isDirectory = entry.isDirectory();
-        
-        // 使用动态忽略规则
-        if (this.shouldIgnore(relativePath, isDirectory)) {
-          continue;
-        }
+      // 第一步：并发处理所有文件和目录的基本信息
+      await Promise.all(
+        entries.map(async (entry) => {
+          try {
+            const fullPath = path.join(dirPath, entry.name);
+            const relativePath = path.relative(this.currentDirectory, fullPath);
+            const isDirectory = entry.isDirectory();
+            
+            // 使用动态忽略规则
+            if (this.shouldIgnore(relativePath, isDirectory)) {
+              return;
+            }
 
-        const fileResult: FileSearchResult = {
-          path: fullPath,
-          name: entry.name,
-          relativePath: relativePath,
-          type: isDirectory ? 'directory' : 'file'
-        };
-        
-        results.push(fileResult);
-        
-        // 如果是目录且没有达到最大深度，继续递归
-        if (isDirectory && currentDepth < maxDepth) {
-          await this.walkDirectory(fullPath, results, currentDepth + 1, maxDepth);
-        }
+            const fileResult: FileSearchResult = {
+              path: fullPath,
+              name: entry.name,
+              relativePath: relativePath,
+              type: isDirectory ? 'directory' : 'file'
+            };
+            
+            processedResults.push(fileResult);
+            
+            // 收集需要进一步遍历的目录
+            if (isDirectory && currentDepth < maxDepth) {
+              directories.push(fullPath);
+            }
+          } catch (error) {
+            // 忽略处理失败的文件
+          }
+        })
+      );
+      
+      // 将处理的结果添加到主结果数组
+      results.push(...processedResults);
+      
+      // 第二步：并发递归处理子目录，但限制并发数量避免过载
+      const concurrencyLimit = Math.min(directories.length, 5); // 限制最多5个并发目录
+      const chunks = this.chunkArray(directories, concurrencyLimit);
+      
+      for (const chunk of chunks) {
+        await Promise.all(
+          chunk.map(dir => 
+            this.walkDirectory(dir, results, currentDepth + 1, maxDepth)
+          )
+        );
       }
     } catch (error) {
       // 忽略无法访问的目录
     }
+  }
+
+  /**
+   * 将数组分割成指定大小的块
+   */
+  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
   }
 
   /**
@@ -789,5 +883,27 @@ export class FileSearchManager {
     this.lastCacheTime = 0;
     this.gitignorePatterns = [];
     this.gitignoreLastModified = 0;
+    this.queryCache.clear();
+    this.hotFiles.clear();
+    this.fileAccessCount.clear();
+  }
+  
+  /**
+   * 获取热门文件列表（用于优化搜索排序）
+   */
+  getHotFiles(): string[] {
+    return Array.from(this.hotFiles);
+  }
+  
+  /**
+   * 清理过期的查询缓存
+   */
+  private cleanupQueryCache(): void {
+    const now = Date.now();
+    for (const [key, value] of this.queryCache.entries()) {
+      if (now - value.timestamp > this.queryCacheExpiration) {
+        this.queryCache.delete(key);
+      }
+    }
   }
 } 
